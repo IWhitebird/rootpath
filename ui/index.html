@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>On-Call Graph</title>
+<script src="https://cdn.jsdelivr.net/npm/force-graph@1.47.4/dist/force-graph.min.js"></script>
+<style>
+  :root {
+    --bg: #0b0f14; --panel: #121821; --panel-2: #18202b; --line: #243040; --text: #dbe4ee; --muted: #8a9bb0;
+    --ok: #3fb950; --warn: #d29922; --bad: #f85149; --idle: #6e7681; --accent: #58a6ff; --path: #ffd166;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { height: 56px; display: flex; align-items: center; gap: 14px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: .2px; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  header .spacer { flex: 1; }
+  button { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; font: inherit; }
+  button:hover { border-color: var(--accent); }
+  button.danger { border-color: #5a2a2a; } button.danger:hover { border-color: var(--bad); }
+  button.primary { background: #1f3b5c; border-color: #2f5f93; } button.primary:hover { border-color: var(--accent); }
+  #busy { color: var(--warn); font-size: 12px; min-width: 120px; text-align: right; }
+  main { display: flex; height: calc(100% - 56px); }
+  #graph { flex: 1; position: relative; min-width: 0; }
+  aside { width: 400px; border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; }
+  section { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  section h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+  .svc { display: grid; grid-template-columns: 12px 1fr 58px 70px; gap: 6px; align-items: center; padding: 2px 0; font-variant-numeric: tabular-nums; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .num { text-align: right; color: var(--muted); }
+  .num.bad { color: var(--bad); }
+  .step { display: grid; grid-template-columns: 22px 1fr; gap: 8px; padding: 6px 0; border-top: 1px dashed #1f2a37; }
+  .step:first-child { border-top: none; }
+  .step .n { width: 20px; height: 20px; border-radius: 50%; background: #2a2f1a; color: var(--path); display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+  .step .tool { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--accent); }
+  .step .tool.act { color: var(--bad); }
+  .step .note { color: var(--muted); font-size: 12px; word-break: break-word; }
+  .step.latest .n { background: var(--path); color: #111; }
+  .meta { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  #report { white-space: pre-wrap; font-size: 12px; color: var(--text); max-height: 360px; overflow-y: auto; }
+  .legend { z-index: 5; position: absolute; left: 12px; bottom: 12px; background: rgba(18,24,33,.92); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 11px; color: var(--muted); }
+  .legend label { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 1px 0; }
+  .legend .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .hint { z-index: 5; position: absolute; right: 12px; top: 12px; color: var(--muted); font-size: 11px; background: rgba(18,24,33,.85); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); }
+  #tip { z-index: 6; position: absolute; pointer-events: none; background: #0d131b; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 11px; max-width: 320px; display: none; white-space: pre-wrap; }
+  .empty { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>On-Call Graph</h1>
+    <div class="sub">An incident agent that reasons over a FalkorDB graph of services, changes, owners and past incidents</div>
+  </div>
+  <div class="spacer"></div>
+  <button class="danger" data-chaos="bad-deploy" title="payment v2.4.1 ships a bug (+ red-herring catalog deploy)">Break: bad deploy</button>
+  <button class="danger" data-chaos="flag" title="fraud_model_v2 flag slows fraud-check (+ red-herring notify deploy)">Break: flag flip</button>
+  <button class="danger" data-chaos="pool" title="inventory DB pool exhausted, no change at all">Break: pool</button>
+  <button class="primary" id="run">Run agent</button>
+  <button id="reset">Reset</button>
+  <div id="busy"></div>
+</header>
+<main>
+  <div id="graph">
+    <div class="hint">nodes the agent looked at are ringed and numbered in step order</div>
+    <div class="legend" id="legend"></div>
+    <div id="tip"></div>
+  </div>
+  <aside>
+    <section><h2>Live health (last 10s)</h2><div id="health"></div></section>
+    <section><h2>Agent investigation</h2><div class="meta" id="invmeta"></div><div id="steps" class="empty">No investigation yet. Break something, then run the agent.</div></section>
+    <section><h2>Agent report</h2><div id="report" class="empty">—</div></section>
+  </aside>
+</main>
+<script>
+const STATUS = { healthy: '#3fb950', degraded: '#d29922', failing: '#f85149', down: '#f85149', idle: '#6e7681', unknown: '#6e7681' };
+const TYPES = {
+  Service:  { color: '#58a6ff', r: 9,   show: true },
+  Change:   { color: '#e3b341', r: 5,   show: true },
+  Flag:     { color: '#39c5cf', r: 5,   show: true },
+  Incident: { color: '#ff7b72', r: 6,   show: true },
+  Action:   { color: '#7ee787', r: 5,   show: true },
+  Team:     { color: '#a371f7', r: 5,   show: true },
+  Person:   { color: '#f778ba', r: 4,   show: true },
+  Runbook:  { color: '#8b949e', r: 4,   show: false },
+};
+const ACTION_TOOLS = new Set(['rollback_service', 'restart_service', 'set_feature_flag']);
+
+let nodesById = new Map(), allLinks = [], visited = new Map(), latestTargets = new Set(), health = {};
+
+const legend = document.getElementById('legend');
+legend.innerHTML = Object.entries(TYPES).map(([t, c]) =>
+  `<label><input type="checkbox" data-type="${t}" ${c.show ? 'checked' : ''}><span class="sw" style="background:${c.color}"></span>${t}</label>`).join('');
+legend.addEventListener('change', e => { TYPES[e.target.dataset.type].show = e.target.checked; render(); });
+
+const el = document.getElementById('graph');
+const tip = document.getElementById('tip');
+const G = ForceGraph()(el)
+  .backgroundColor('#0b0f14')
+  .nodeId('id')
+  .linkDirectionalArrowLength(l => l.type === 'CALLS' ? 5 : 0)
+  .linkDirectionalArrowRelPos(1)
+  .linkColor(l => onPath(l) ? '#ffd166' : l.type === 'CALLS' ? (l.optional ? '#3a4a5e' : '#4b6a8f') : '#263241')
+  .linkWidth(l => onPath(l) ? 2.5 : l.type === 'CALLS' ? 1.6 : 0.6)
+  .linkLineDash(l => l.optional ? [3, 3] : null)
+  .linkDirectionalParticles(l => l.type === 'CALLS' ? 2 : 0)
+  .linkDirectionalParticleWidth(l => onPath(l) ? 3 : 1.5)
+  .linkDirectionalParticleColor(l => failingLink(l) ? '#f85149' : '#58a6ff')
+  .nodeCanvasObject(drawNode)
+  .nodePointerAreaPaint((n, color, ctx) => { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(n.x, n.y, (TYPES[n.type]?.r || 5) + 3, 0, 2 * Math.PI); ctx.fill(); })
+  .onNodeHover(n => {
+    el.style.cursor = n ? 'pointer' : null;
+    if (!n) { tip.style.display = 'none'; return; }
+    const p = Object.entries(n.props).filter(([k, v]) => v !== null && v !== '' && !['at', 'health_at', 'opened_at', 'resolved_at', 'observed_at'].includes(k))
+      .map(([k, v]) => `${k}: ${typeof v === 'number' ? Math.round(v * 1000) / 1000 : v}`).join('\n');
+    tip.textContent = `${n.type}: ${n.name}\n${p}`; tip.style.display = 'block';
+  })
+  .autoPauseRedraw(false)
+  .cooldownTicks(120);
+el.addEventListener('mousemove', e => { const r = el.getBoundingClientRect(); tip.style.left = (e.clientX - r.left + 14) + 'px'; tip.style.top = (e.clientY - r.top + 14) + 'px'; });
+G.d3Force('charge').strength(-160);
+G.d3Force('link').distance(l => l.type === 'CALLS' ? 70 : 40);
+new ResizeObserver(() => G.width(el.clientWidth).height(el.clientHeight)).observe(el);
+
+function idOf(x) { return typeof x === 'object' ? x.id : x; }
+const PATH_TYPES = new Set(['CALLS', 'CHANGED', 'TOGGLED', 'AFFECTS', 'ON_CALL_FOR', 'ROOT_CAUSE', 'REVERTS', 'ON']);
+function onPath(l) { return PATH_TYPES.has(l.type) && visited.has(idOf(l.source)) && visited.has(idOf(l.target)); }
+function failingLink(l) { const t = nodesById.get(idOf(l.target)); return t && ['failing', 'down', 'degraded'].includes(svcStatus(t)); }
+function svcStatus(n) { return (health[n.name] && health[n.name].status) || n.props.status || 'unknown'; }
+
+function drawNode(n, ctx, scale) {
+  const base = TYPES[n.type] || { color: '#888', r: 4 };
+  const r = base.r;
+  const fill = n.type === 'Service' ? STATUS[svcStatus(n)] || base.color : base.color;
+  if (visited.has(n.id)) {
+    const pulse = latestTargets.has(n.id) ? 3 + 2 * Math.sin(Date.now() / 180) : 2;
+    ctx.beginPath(); ctx.arc(n.x, n.y, r + 3 + pulse, 0, 2 * Math.PI);
+    ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2 / Math.max(scale, .6) ; ctx.stroke();
+  }
+  ctx.beginPath();
+  if (n.type === 'Change') { ctx.moveTo(n.x, n.y - r - 1); ctx.lineTo(n.x + r + 1, n.y); ctx.lineTo(n.x, n.y + r + 1); ctx.lineTo(n.x - r - 1, n.y); ctx.closePath(); }
+  else if (n.type === 'Team' || n.type === 'Runbook') ctx.rect(n.x - r, n.y - r, 2 * r, 2 * r);
+  else if (n.type === 'Flag') { ctx.moveTo(n.x, n.y - r - 1); ctx.lineTo(n.x + r + 1, n.y + r); ctx.lineTo(n.x - r - 1, n.y + r); ctx.closePath(); }
+  else ctx.arc(n.x, n.y, r, 0, 2 * Math.PI);
+  ctx.fillStyle = fill; ctx.fill();
+  if (n.type === 'Service') { ctx.strokeStyle = '#0b0f14'; ctx.lineWidth = 1.5; ctx.stroke(); }
+  const fs = (n.type === 'Service' ? 12 : 9.5) / Math.max(scale, .9);
+  if (n.type === 'Service' || scale > 1.4 || visited.has(n.id)) {
+    ctx.font = `${n.type === 'Service' ? 600 : 400} ${fs}px ui-sans-serif, system-ui`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillStyle = n.type === 'Service' ? '#dbe4ee' : '#9fb0c3';
+    ctx.fillText(n.name, n.x, n.y + r + 3);
+  }
+  const steps = visited.get(n.id);
+  if (steps) {
+    const label = steps.length > 3 ? `${steps[0]}…${steps[steps.length - 1]}` : steps.join(',');
+    ctx.font = `700 ${9 / Math.max(scale, .9)}px ui-sans-serif`;
+    const w = ctx.measureText(label).width + 6 / scale;
+    ctx.fillStyle = '#ffd166'; ctx.fillRect(n.x + r, n.y - r - 10 / scale, w, 11 / scale);
+    ctx.fillStyle = '#111'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText(label, n.x + r + 3 / scale, n.y - r - 9.5 / scale);
+  }
+}
+
+function render() {
+  const nodes = [...nodesById.values()].filter(n => TYPES[n.type]?.show);
+  const ids = new Set(nodes.map(n => n.id));
+  const links = allLinks.filter(l => ids.has(idOf(l.source)) && ids.has(idOf(l.target)));
+  G.graphData({ nodes, links });
+}
+
+async function loadGraph() {
+  const data = await (await fetch('/api/graph')).json();
+  let changed = data.nodes.length !== nodesById.size;
+  const fresh = new Map();
+  for (const n of data.nodes) {
+    const old = nodesById.get(n.id);
+    if (old) { old.props = n.props; old.name = n.name; fresh.set(n.id, old); }
+    else { fresh.set(n.id, n); changed = true; }
+  }
+  nodesById = fresh;
+  const key = l => `${idOf(l.source)}|${l.type}|${idOf(l.target)}`;
+  const before = new Set(allLinks.map(key));
+  if (data.links.length !== allLinks.length || data.links.some(l => !before.has(key(l)))) { allLinks = data.links; changed = true; }
+  if (changed) render();
+}
+
+async function loadHealth() {
+  const data = await (await fetch('/api/health')).json();
+  health = data.services;
+  document.getElementById('busy').textContent = data.busy ? `⏳ ${data.busy}…` : '';
+  const order = { down: 0, failing: 1, degraded: 2, healthy: 3, idle: 4, unknown: 5 };
+  document.getElementById('health').innerHTML = Object.entries(health).sort((a, b) => order[a[1].status] - order[b[1].status]).map(([name, s]) => `
+    <div class="svc"><span class="dot" style="background:${STATUS[s.status]}"></span><span>${name} <span style="color:var(--muted)">v${s.version || '?'}</span></span>
+    <span class="num ${s.error_rate > .03 ? 'bad' : ''}">${s.status === 'down' ? 'DOWN' : Math.round((s.error_rate || 0) * 100) + '%'}</span>
+    <span class="num ${(s.p95_ms || 0) > 1000 ? 'bad' : ''}">${Math.round(s.p95_ms || 0)} ms</span></div>`).join('');
+}
+
+let lastInv = null, lastSteps = 0;
+async function loadInvestigation() {
+  const data = await (await fetch('/api/investigation')).json();
+  if (!data.investigation) return;
+  const inv = data.investigation;
+  visited = new Map();
+  data.steps.forEach(s => s.targets.forEach(t => { if (!visited.has(t)) visited.set(t, []); visited.get(t).push(s.n); }));
+  const last = data.steps[data.steps.length - 1];
+  latestTargets = new Set(last ? last.targets : []);
+  const meta = [inv.agent, inv.mode && `${inv.mode} mode`, inv.alert,
+    inv.duration_s && `${inv.duration_s}s`, inv.tool_calls && `${inv.tool_calls} tool calls`,
+    inv.cost_usd ? `$${inv.cost_usd.toFixed(3)}` : null].filter(Boolean).join(' · ');
+  document.getElementById('invmeta').textContent = `${inv.id}${meta ? ' · ' + meta : ''}`;
+  if (inv.id !== lastInv || data.steps.length !== lastSteps) {
+    const box = document.getElementById('steps');
+    box.classList.remove('empty');
+    box.innerHTML = data.steps.map((s, i) => `<div class="step ${i === data.steps.length - 1 ? 'latest' : ''}">
+      <div class="n">${s.n}</div><div><div class="tool ${ACTION_TOOLS.has(s.tool) && !/DRY RUN/.test(s.note) ? 'act' : ''}">${s.tool}</div><div class="note">${escapeHtml(s.note || '')}</div></div></div>`).join('');
+    lastInv = inv.id; lastSteps = data.steps.length;
+  }
+  const rep = document.getElementById('report');
+  if (inv.report) { rep.classList.remove('empty'); rep.textContent = inv.report; }
+  else { rep.classList.add('empty'); rep.textContent = inv.finished_at ? '—' : 'agent is working…'; }
+}
+function escapeHtml(s) { return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+
+async function post(url) {
+  const r = await fetch(url, { method: 'POST' });
+  if (!r.ok) alert((await r.json()).detail || r.statusText);
+}
+document.querySelectorAll('[data-chaos]').forEach(b => b.onclick = () => post(`/api/chaos/${b.dataset.chaos}`));
+document.getElementById('run').onclick = () => post('/api/agent?mode=graph');
+document.getElementById('reset').onclick = () => post('/api/reset');
+
+function tick(fn, ms) { const run = () => fn().catch(() => {}).finally(() => setTimeout(run, ms)); run(); }
+tick(loadGraph, 4000); tick(loadHealth, 2000); tick(loadInvestigation, 1500);
+</script>
+</body>
+</html>

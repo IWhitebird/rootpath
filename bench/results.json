@@ -1,0 +1,27 @@
+[
+  {
+    "scenario": "bad-deploy",
+    "mode": "graph",
+    "investigation": "inv-024009-graph-3b6c",
+    "fixed": true,
+    "correct_action": true,
+    "wrong_actions": [],
+    "time_to_resolve_s": 44.0,
+    "agent_s": 39.9,
+    "tool_calls": 9,
+    "tools": [
+      "rank_suspects",
+      "get_logs",
+      "find_similar_incidents",
+      "open_incident",
+      "rollback_service",
+      "rollback_service",
+      "verify_recovery",
+      "notify_owner",
+      "resolve_incident"
+    ],
+    "input_tokens": 102231,
+    "output_tokens": 2591,
+    "cost_usd": 0.1334788
+  }
+]

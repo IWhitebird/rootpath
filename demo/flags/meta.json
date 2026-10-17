@@ -1,0 +1,4 @@
+{
+  "fraud_model_v2":  {"affects": ["fraud-check"], "team": "risk", "description": "Score transactions with the v2 gradient-boosted fraud model"},
+  "new_checkout_ui": {"affects": ["frontend"], "team": "web", "description": "Redesigned one-page checkout"}
+}

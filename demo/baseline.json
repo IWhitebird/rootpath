@@ -1,0 +1,12 @@
+{
+  "services": {
+    "frontend":    {"VERSION": "2.8.0", "BUG": ""},
+    "catalog":     {"VERSION": "3.0.4", "BUG": ""},
+    "checkout":    {"VERSION": "4.2.0", "BUG": ""},
+    "payment":     {"VERSION": "2.4.0", "BUG": ""},
+    "fraud-check": {"VERSION": "1.9.2", "BUG": ""},
+    "inventory":   {"VERSION": "5.1.1", "BUG": ""},
+    "notify":      {"VERSION": "1.2.0", "BUG": ""}
+  },
+  "flags": {"fraud_model_v2": false, "new_checkout_ui": true}
+}

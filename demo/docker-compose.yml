@@ -1,0 +1,74 @@
+# On-Call Graph demo stack: FalkorDB + 7 microservices + a load generator.
+# Started by `oncall-graph demo up` (which also writes env/*.env and flags/flags.json).
+name: oncall-demo
+
+x-service: &service
+  image: oncall-demo-service:latest
+  pull_policy: never
+  restart: unless-stopped
+  volumes: ["./flags:/flags:ro"]
+
+services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    ports: ["6380:6379", "3005:3000"]
+    volumes: ["falkordb-data:/var/lib/falkordb/data"]
+    restart: unless-stopped
+
+  frontend:
+    <<: *service
+    env_file: env/frontend.env
+    environment: { SERVICE_NAME: frontend, ROUTES: "browse=catalog;checkout=checkout" }
+    ports: ["7101:8000"]
+    labels: { oncall.team: web, oncall.tier: "1", oncall.internet_facing: "true", oncall.description: "Public web + API gateway" }
+
+  catalog:
+    <<: *service
+    env_file: env/catalog.env
+    environment: { SERVICE_NAME: catalog, CALLS: inventory }
+    ports: ["7102:8000"]
+    labels: { oncall.team: commerce, oncall.tier: "2", oncall.description: "Product listing and search" }
+
+  checkout:
+    <<: *service
+    env_file: env/checkout.env
+    environment: { SERVICE_NAME: checkout, CALLS: "inventory,payment,notify", OPTIONAL_CALLS: notify, CALL_TIMEOUT: "3" }
+    ports: ["7103:8000"]
+    labels: { oncall.team: commerce, oncall.tier: "1", oncall.description: "Cart and order placement" }
+
+  payment:
+    <<: *service
+    env_file: env/payment.env
+    environment: { SERVICE_NAME: payment, CALLS: fraud-check, CALL_TIMEOUT: "1.5" }
+    ports: ["7104:8000"]
+    labels: { oncall.team: payments, oncall.tier: "1", oncall.description: "Card tokenization and charging" }
+
+  fraud-check:
+    <<: *service
+    env_file: env/fraud-check.env
+    environment: { SERVICE_NAME: fraud-check, FLAG_LATENCY: "fraud_model_v2=1800" }
+    ports: ["7105:8000"]
+    labels: { oncall.team: risk, oncall.tier: "2", oncall.description: "Transaction risk scoring" }
+
+  inventory:
+    <<: *service
+    env_file: env/inventory.env
+    environment: { SERVICE_NAME: inventory, CHAOS_ENABLED: "1" }
+    ports: ["7106:8000"]
+    labels: { oncall.team: platform, oncall.tier: "1", oncall.description: "Stock levels (Postgres-backed)" }
+
+  notify:
+    <<: *service
+    env_file: env/notify.env
+    environment: { SERVICE_NAME: notify }
+    ports: ["7107:8000"]
+    labels: { oncall.team: platform, oncall.tier: "3", oncall.description: "Order emails and push notifications" }
+
+  loadgen:
+    <<: *service
+    command: ["python", "loadgen.py"]
+    environment: { TARGET: "http://frontend:8000", RPS: "10" }
+    labels: { oncall.ignore: "true" }
+
+volumes:
+  falkordb-data:

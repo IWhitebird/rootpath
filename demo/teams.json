@@ -1,0 +1,10 @@
+{
+  "teams": [
+    {"name": "web",      "channel": "#team-web",      "oncall": "aarav",  "members": ["aarav", "meera"]},
+    {"name": "commerce", "channel": "#team-commerce", "oncall": "kabir",  "members": ["kabir", "zoya"]},
+    {"name": "payments", "channel": "#team-payments", "oncall": "riya",   "members": ["riya", "dev"]},
+    {"name": "risk",     "channel": "#team-risk",     "oncall": "ananya", "members": ["ananya", "omar"]},
+    {"name": "platform", "channel": "#team-platform", "oncall": "sam",    "members": ["sam", "li"]}
+  ],
+  "escalation": {"payments": "commerce", "risk": "payments", "commerce": "web", "platform": "web"}
+}

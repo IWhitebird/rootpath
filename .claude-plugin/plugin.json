@@ -1,0 +1,15 @@
+{
+  "name": "oncall-graph",
+  "version": "0.1.0",
+  "description": "Turn your coding agent into an on-call engineer: graph-powered incident diagnosis, safe remediation and incident memory on FalkorDB.",
+  "author": { "name": "Shreyas Patange" },
+  "license": "Apache-2.0",
+  "keywords": ["sre", "on-call", "incident-response", "falkordb", "knowledge-graph", "mcp"],
+  "mcpServers": {
+    "oncall": {
+      "command": "uv",
+      "args": ["run", "--quiet", "--directory", "${CLAUDE_PLUGIN_ROOT}", "oncall-graph", "mcp"],
+      "env": { "ONCALL_AGENT": "claude-code" }
+    }
+  }
+}
