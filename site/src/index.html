@@ -1,0 +1,869 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>On-Call Graph</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="An incident agent that reasons over a FalkorDB graph of services, changes, owners and past incidents. It finds where a failure starts, fixes it, verifies the fix and remembers.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: an incident console as the hero (live replay of a recorded incident), then the method,
+   the evidence and the install, each as a plain band on cool slate paper. */
+:root {
+  --bg: #f2f5f7;
+  --surface: #ffffff;
+  --surface-2: #e8edf1;
+  --ink: #0f1a22;
+  --muted: #566774;
+  --line: #d3dbe2;
+  --accent: #0a6c96;
+  --path: #d99a00;
+  --path-ink: #241a00;
+  --ok: #1d8a4c;
+  --warn: #b97000;
+  --bad: #cc3a2b;
+  --idle: #8a98a4;
+  --code-bg: #0f1a22;
+  --code-ink: #dbe6ee;
+  --code-dim: #8597a6;
+  --code-key: #ffc94a;
+  --code-str: #7fd1a8;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --step-0: 0.875rem; --step-1: 1rem; --step-2: 1.125rem; --step-3: 1.5rem; --step-4: 2.125rem; --step-5: clamp(2.4rem, 5.4vw, 4.1rem);
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1117; --surface: #111a22; --surface-2: #17222c; --ink: #e2eaf0; --muted: #8c9dab; --line: #24323e;
+    --accent: #5db9e8; --path: #ffc94a; --path-ink: #241a00; --ok: #44c47b; --warn: #f0a92a; --bad: #ff6a5a; --idle: #6b7b88;
+    --code-bg: #070c11; --code-ink: #dbe6ee; --code-dim: #7d8f9e; --code-key: #ffc94a; --code-str: #7fd1a8;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1117; --surface: #111a22; --surface-2: #17222c; --ink: #e2eaf0; --muted: #8c9dab; --line: #24323e;
+  --accent: #5db9e8; --path: #ffc94a; --path-ink: #241a00; --ok: #44c47b; --warn: #f0a92a; --bad: #ff6a5a; --idle: #6b7b88;
+  --code-bg: #070c11; --code-ink: #dbe6ee; --code-dim: #7d8f9e; --code-key: #ffc94a; --code-str: #7fd1a8;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 var(--step-1)/1.6 var(--body); -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, [role="tab"]:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+code, pre, .mono { font-family: var(--mono); }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.band { padding-block: clamp(48px, 7vw, 96px); border-top: 1px solid var(--line); }
+.eyebrow { font: 600 0.75rem/1.2 var(--mono); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -0.015em; }
+h2 { font-size: var(--step-4); font-weight: 700; line-height: 1.12; }
+h3 { font-size: var(--step-2); font-weight: 700; line-height: 1.3; letter-spacing: -0.005em; }
+p { margin: 0; }
+.lede { max-width: 62ch; color: var(--muted); font-size: var(--step-2); }
+
+/* ---------- top bar ---------- */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 18px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; font: 800 1.15rem/1 var(--display); letter-spacing: -0.01em; color: var(--ink); text-decoration: none; }
+.brand svg { flex: none; }
+.top nav { display: flex; gap: 20px; flex-wrap: wrap; font-size: var(--step-0); }
+.top nav a { color: var(--muted); text-decoration: none; }
+.top nav a:hover { color: var(--ink); }
+
+/* ---------- hero ---------- */
+.hero { padding-block: clamp(20px, 4vw, 48px) clamp(40px, 6vw, 72px); }
+.hero-head { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 64px); align-items: end; margin-bottom: 28px; }
+.hero h1 { font-size: var(--step-5); font-weight: 800; line-height: 1.02; letter-spacing: -0.03em; margin-top: 14px; }
+.hero h1 .hl { background: linear-gradient(transparent 62%, color-mix(in srgb, var(--path) 55%, transparent) 62%); padding: 0 0.06em; }
+.hero-copy { display: grid; gap: 18px; }
+.hero-copy p { color: var(--muted); font-size: var(--step-2); max-width: 46ch; }
+.cta { display: flex; gap: 12px; flex-wrap: wrap; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 8px; font: 600 var(--step-0)/1 var(--body); text-decoration: none; border: 1px solid var(--line); color: var(--ink); background: var(--surface); cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+
+/* ---------- replay console ---------- */
+.console { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: 0 1px 0 var(--line), 0 24px 60px -32px color-mix(in srgb, var(--ink) 35%, transparent); }
+.console-bar { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; min-width: 0; }
+.tab { border: 1px solid transparent; background: none; color: var(--muted); padding: 7px 11px; border-radius: 7px; font: 500 var(--step-0)/1.2 var(--body); cursor: pointer; text-align: left; }
+.tab:hover { color: var(--ink); background: var(--surface-2); }
+.tab[aria-selected="true"] { color: var(--ink); background: var(--surface-2); border-color: var(--line); }
+.tab small { display: block; font: 400 0.72rem/1.3 var(--mono); color: var(--muted); margin-top: 2px; }
+.transport { display: flex; align-items: center; gap: 8px; }
+.clock { font: 600 0.95rem/1 var(--mono); font-variant-numeric: tabular-nums; min-width: 8.5ch; text-align: right; }
+.icon-btn { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+.icon-btn:hover { border-color: var(--accent); }
+.speed { font: 600 0.75rem/1 var(--mono); padding: 0 10px; width: auto; }
+.console-body { display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 520px; }
+.stage { position: relative; min-width: 0; background:
+  radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--ink) 9%, transparent) 1px, transparent 0) 0 0 / 22px 22px; }
+#graph { position: absolute; inset: 0; }
+.caption { position: absolute; left: 14px; right: 14px; top: 12px; z-index: 3; display: flex; gap: 10px; align-items: flex-start; pointer-events: none; }
+.caption .chip { flex: none; white-space: nowrap; font: 700 0.72rem/1 var(--mono); padding: 6px 8px; border-radius: 6px; background: var(--ink); color: var(--bg); letter-spacing: 0.04em; text-transform: uppercase; }
+.caption .chip.alert { background: var(--bad); color: #fff; }
+.caption .chip.step { background: var(--path); color: var(--path-ink); }
+.caption .chip.ok { background: var(--ok); color: #fff; }
+.caption .text { font: 500 var(--step-0)/1.45 var(--body); background: color-mix(in srgb, var(--surface) 88%, transparent); padding: 4px 8px; border-radius: 6px; max-width: 70ch; }
+.caption .text code { font-size: 0.82rem; }
+.legend { position: absolute; left: 14px; bottom: 12px; z-index: 3; display: flex; flex-wrap: wrap; gap: 4px 14px; font: 400 0.72rem/1.4 var(--mono); color: var(--muted); background: color-mix(in srgb, var(--surface) 85%, transparent); padding: 6px 8px; border-radius: 6px; max-width: calc(100% - 28px); }
+.legend i { display: inline-block; width: 9px; height: 9px; margin-right: 5px; vertical-align: -1px; border-radius: 50%; }
+.legend i.sq { border-radius: 2px; } .legend i.dia { border-radius: 1px; transform: rotate(45deg) scale(.85); }
+.side { border-left: 1px solid var(--line); display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; max-height: 620px; }
+.side h4 { margin: 0 0 8px; font: 600 0.7rem/1 var(--mono); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.health { padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.svc { display: grid; grid-template-columns: 10px minmax(0, 1fr) 44px 64px; gap: 8px; align-items: center; font: 400 0.82rem/1.75 var(--mono); font-variant-numeric: tabular-nums; }
+.svc .dot { width: 8px; height: 8px; border-radius: 50%; }
+.svc .n { text-align: right; color: var(--muted); }
+.svc .n.bad { color: var(--bad); font-weight: 600; }
+.steps { padding: 14px 16px; overflow-y: auto; min-height: 0; }
+.step { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; padding: 7px 0; border-top: 1px dashed var(--line); }
+.step:first-of-type { border-top: 0; }
+.step .num { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font: 700 0.7rem/1 var(--mono); background: var(--surface-2); color: var(--muted); }
+.step.on .num { background: var(--path); color: var(--path-ink); }
+.step .tool { font: 600 0.8rem/1.3 var(--mono); color: var(--accent); }
+.step .tool.act { color: var(--bad); }
+.step .note { font-size: 0.8rem; color: var(--muted); line-height: 1.45; overflow-wrap: anywhere; }
+.step.enter { animation: rise .35s ease-out; }
+@keyframes rise { from { transform: translateY(4px); opacity: .4; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .step.enter { animation: none; } }
+.empty { color: var(--muted); font-size: 0.82rem; }
+.timeline { border-top: 1px solid var(--line); padding: 12px 16px 14px; }
+.track { position: relative; height: 40px; }
+.track .rail { position: absolute; left: 0; right: 0; top: 18px; height: 4px; border-radius: 2px; background: var(--surface-2); }
+.track .fill { position: absolute; left: 0; top: 18px; height: 4px; border-radius: 2px; background: var(--ink); width: 0; }
+.track .tick { position: absolute; top: 12px; width: 2px; height: 16px; background: var(--path); border-radius: 1px; transform: translateX(-1px); }
+.track .ev { position: absolute; top: 0; transform: translateX(-50%); font: 600 0.66rem/1 var(--mono); text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; color: var(--muted); }
+.track .ev::after { content: ""; position: absolute; left: 50%; top: 13px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: var(--muted); border: 2px solid var(--surface); }
+.track .ev.alert { color: var(--bad); } .track .ev.alert::after { background: var(--bad); }
+.track .ev.done { color: var(--ok); } .track .ev.done::after { background: var(--ok); }
+.track input[type="range"] { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; margin: 0; }
+.report { border-top: 1px solid var(--line); }
+.report summary { list-style: none; cursor: pointer; padding: 12px 16px; display: flex; justify-content: space-between; gap: 12px; align-items: center; font: 600 var(--step-0)/1.3 var(--body); }
+.report summary::-webkit-details-marker { display: none; }
+.report summary .meta { font: 400 0.78rem/1.3 var(--mono); color: var(--muted); }
+.report .md { padding: 0 16px 18px; max-width: 86ch; font-size: 0.92rem; }
+.md h2, .md h3 { font-size: 1.02rem; margin: 14px 0 6px; font-family: var(--body); font-weight: 600; letter-spacing: 0; }
+.md p, .md ul, .md ol { margin: 0 0 9px; }
+.md ul, .md ol { padding-left: 20px; }
+.md code { font-size: 0.83em; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.md pre { background: var(--code-bg); color: var(--code-ink); padding: 10px 12px; border-radius: 8px; overflow-x: auto; font-size: 0.8rem; }
+.md pre code { background: none; padding: 0; }
+
+.facts { display: flex; gap: 10px 28px; flex-wrap: wrap; margin-top: 16px; font-size: var(--step-0); color: var(--muted); }
+.facts b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---------- method ---------- */
+.method { display: grid; gap: 40px; margin-top: 36px; }
+.stage-row { display: grid; grid-template-columns: 64px minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 20px 32px; align-items: start; }
+.stage-row .idx { font: 800 2.4rem/1 var(--display); color: var(--path); letter-spacing: -0.03em; }
+.stage-row p { color: var(--muted); margin-top: 8px; max-width: 54ch; }
+.stage-row .tools { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { font: 500 0.72rem/1 var(--mono); padding: 5px 7px; border-radius: 5px; background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); }
+pre.code { margin: 0; background: var(--code-bg); color: var(--code-ink); border-radius: var(--radius); padding: 14px 16px; overflow-x: auto; font-size: 0.8rem; line-height: 1.6; }
+pre.code .k { color: var(--code-key); } pre.code .s { color: var(--code-str); } pre.code .c { color: var(--code-dim); }
+
+/* ---------- evidence ---------- */
+.bench-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px 48px; margin-top: 32px; align-items: start; }
+.bars { display: grid; gap: 22px; }
+.bars h3 { font-size: var(--step-1); }
+.bar-row { display: grid; grid-template-columns: 172px minmax(0, 1fr) 64px; gap: 10px; align-items: center; font-size: 0.85rem; }
+.bar-row .lbl { color: var(--muted); }
+.bar-row .v { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.bar { height: 14px; border-radius: 3px; background: var(--surface-2); position: relative; overflow: hidden; }
+.bar span { position: absolute; inset: 0 auto 0 0; border-radius: 3px; }
+.bar span.g { background: var(--ink); } .bar span.b { background: var(--idle); }
+.key { display: flex; gap: 16px; font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
+.key i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.84rem; font-variant-numeric: tabular-nums; }
+th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font: 600 0.7rem/1.2 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); background: var(--surface-2); }
+tr:last-child td { border-bottom: 0; }
+td.miss { color: var(--bad); font-weight: 600; }
+td.hit { color: var(--ok); font-weight: 600; }
+.findings { display: grid; gap: 14px; }
+.finding { padding-left: 14px; border-left: 3px solid var(--line); }
+.finding.key-f { border-left-color: var(--path); }
+.finding b { display: block; font-weight: 600; margin-bottom: 2px; }
+.finding p { color: var(--muted); font-size: 0.94rem; }
+.small { font-size: 0.8rem; color: var(--muted); }
+
+/* ---------- install ---------- */
+.install { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 32px 48px; margin-top: 32px; align-items: start; }
+.hosts { display: grid; gap: 4px; }
+.host { text-align: left; padding: 12px 14px; border-radius: 8px; border: 1px solid transparent; background: none; cursor: pointer; color: var(--ink); font: inherit; }
+.host:hover { background: var(--surface); }
+.host[aria-selected="true"] { background: var(--surface); border-color: var(--line); }
+.host b { display: block; font-family: var(--display); font-size: 1.05rem; }
+.host span { color: var(--muted); font-size: 0.86rem; }
+.snippet { position: relative; }
+.copy { position: absolute; top: 10px; right: 10px; font: 600 0.72rem/1 var(--mono); padding: 6px 9px; border-radius: 6px; border: 1px solid var(--code-dim); background: transparent; color: var(--code-ink); cursor: pointer; }
+.copy:hover { border-color: var(--code-key); color: var(--code-key); }
+.snippet-note { margin-top: 12px; color: var(--muted); font-size: 0.9rem; max-width: 62ch; }
+
+/* ---------- model ---------- */
+.model { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px 48px; margin-top: 32px; }
+.model ul { margin: 0; padding-left: 18px; color: var(--muted); display: grid; gap: 8px; }
+.model li b { color: var(--ink); font-weight: 600; }
+
+/* ---------- footer ---------- */
+footer { border-top: 1px solid var(--line); padding-block: 36px 48px; color: var(--muted); font-size: 0.88rem; }
+.foot { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 24px 48px; }
+.foot p + p { margin-top: 8px; }
+
+@media (max-width: 980px) {
+  .hero-head, .bench-grid, .install, .model, .foot { grid-template-columns: minmax(0, 1fr); }
+  .console-body { grid-template-columns: minmax(0, 1fr); }
+  .stage { height: 420px; }
+  .side { border-left: 0; border-top: 1px solid var(--line); max-height: none; }
+  .steps { max-height: 340px; }
+  .stage-row { grid-template-columns: 44px minmax(0, 1fr); }
+  .stage-row pre { grid-column: 1 / -1; }
+  .stage-row .idx { font-size: 1.8rem; }
+}
+@media (max-width: 560px) {
+  .stage { height: 360px; }
+  .bar-row { grid-template-columns: 112px minmax(0, 1fr) 56px; font-size: 0.78rem; }
+  .console-bar { gap: 8px; }
+  .tab small { display: none; }
+  .tabs { flex-wrap: nowrap; overflow-x: auto; flex-basis: 100%; scrollbar-width: none; }
+  .tab { white-space: nowrap; }
+  .transport { margin-left: auto; }
+  .track .ev { font-size: 0.58rem; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="#top" aria-label="On-Call Graph home">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
+        <circle cx="5" cy="6" r="3.2" fill="currentColor"/><circle cx="20" cy="6" r="3.2" fill="currentColor" opacity=".45"/>
+        <circle cx="13" cy="13" r="3.2" fill="currentColor"/><circle cx="20" cy="20" r="3.6" fill="var(--bad)"/>
+        <path d="M5 6 13 13 20 20M20 6 13 13" stroke="currentColor" stroke-width="1.6" fill="none" opacity=".55"/>
+        <circle cx="20" cy="20" r="6.2" fill="none" stroke="var(--path)" stroke-width="1.6"/>
+      </svg>
+      On-Call Graph
+    </a>
+    <nav aria-label="Sections">
+      <a href="#how">How it works</a>
+      <a href="#evidence">Benchmark</a>
+      <a href="#install">Install</a>
+      <a href="#model">Graph model</a>
+      <a id="repo-link" href="#install">Source</a>
+    </nav>
+  </header>
+</div>
+
+<main id="top">
+  <section class="hero">
+    <div class="wrap">
+      <div class="hero-head">
+        <div>
+          <div class="eyebrow">Graph Hacks 2026 · FalkorDB × WeMakeDevs · Track 01 + 02</div>
+          <h1>The alert is never where <span class="hl">the bug is.</span></h1>
+        </div>
+        <div class="hero-copy">
+          <p>On-Call Graph gives an AI agent a FalkorDB graph of your services, deploys, feature flags, owners and past incidents. It follows the failure to where it starts, fixes it, checks the fix, and remembers what happened.</p>
+          <div class="cta">
+            <a class="btn primary" href="#install">Install the plugin</a>
+            <a class="btn" href="#how">How it reasons</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="console" id="replay" aria-label="Replay of a recorded incident">
+        <div class="console-bar">
+          <div class="tabs" role="tablist" aria-label="Recorded incidents" id="tabs"></div>
+          <div class="transport">
+            <span class="clock" id="clock" aria-live="off">T+00:00</span>
+            <button class="icon-btn" id="play" aria-label="Pause replay"></button>
+            <button class="icon-btn speed" id="speed" aria-label="Playback speed">2×</button>
+            <button class="icon-btn" id="restart" aria-label="Restart replay">
+              <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8a5 5 0 1 0 1.6-3.7M3 2v3.3h3.3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="console-body">
+          <div class="stage">
+            <div id="graph"></div>
+            <div class="caption" id="caption"><span class="chip">ready</span><span class="text">Loading the recording.</span></div>
+            <div class="legend" aria-hidden="true">
+              <span><i style="background:var(--ok)"></i>service, coloured by live health</span>
+              <span><i class="dia" style="background:var(--warn)"></i>deploy or flag change</span>
+              <span><i style="background:var(--bad);opacity:.75"></i>incident</span>
+              <span><i class="sq" style="background:#8d6ad8"></i>team</span>
+              <span><i style="background:transparent;box-shadow:0 0 0 2px var(--path)"></i>looked at by the agent, in step order</span>
+            </div>
+          </div>
+          <div class="side">
+            <div class="health"><h4>Live health · last 8s</h4><div id="health"></div></div>
+            <div class="steps"><h4>Agent steps</h4><div id="steps"><p class="empty">Waiting for the alert.</p></div></div>
+          </div>
+        </div>
+        <div class="timeline">
+          <div class="track" id="track">
+            <div class="rail"></div><div class="fill" id="fill"></div>
+            <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Scrub through the incident">
+          </div>
+        </div>
+        <details class="report" id="report">
+          <summary><span>The agent's report</span><span class="meta" id="report-meta"></span></summary>
+          <div class="md" id="report-body"></div>
+        </details>
+      </div>
+      <div class="facts" id="facts"></div>
+    </div>
+  </section>
+
+  <section class="band" id="how">
+    <div class="wrap">
+      <div class="eyebrow">What happens when the pager goes off</div>
+      <h2 style="margin-top:10px">Five steps, each one a graph query</h2>
+      <p class="lede" style="margin-top:14px">The service that alerts is rarely the one that is broken. A deploy only matters if it sits on the failing path, and a feature flag reaches services it was never deployed to. These are questions about how things connect, so the agent asks the graph.</p>
+      <div class="method">
+        <div class="stage-row">
+          <div class="idx">1</div>
+          <div><h3>Locate where the failure starts</h3>
+            <p>Walk downstream from the alerting service. Every possible cause is in that set and nothing else is. The deepest unhealthy service whose own dependencies are healthy is where the failure starts; everything above it is passing the error along. Changes outside the set are ruled out by name.</p>
+            <div class="tools"><span class="pill">rank_suspects</span><span class="pill">algo.betweenness</span><span class="pill">algo.SPpaths</span></div></div>
+<pre class="code"><span class="k">MATCH</span> p = (s:Service {name: <span class="s">$alerting</span>})-[:CALLS*0..6]->(d:Service)
+<span class="k">RETURN</span> d.name, min(length(p)) <span class="k">AS</span> hops
+
+<span class="c">// a flag reaches a service it was never deployed to</span>
+<span class="k">MATCH</span> (x:FlagChange)-[:TOGGLED]->(:Flag)-[:AFFECTS]->(d:Service)
+<span class="k">WHERE</span> d.name <span class="k">IN</span> <span class="s">$candidates</span> <span class="k">AND</span> x.at >= <span class="s">$since</span>
+<span class="k">RETURN</span> d.name, x</pre>
+        </div>
+        <div class="stage-row">
+          <div class="idx">2</div>
+          <div><h3>Confirm with logs and memory</h3>
+            <p>Read the logs of the top suspect only. Search incident memory with a full-text index plus graph overlap, and pull the root cause and the fix of anything similar. A runbook attached to the service travels with the answer.</p>
+            <div class="tools"><span class="pill">get_logs</span><span class="pill">find_similar_incidents</span><span class="pill">get_owner</span></div></div>
+<pre class="code"><span class="k">CALL</span> db.idx.fulltext.queryNodes(<span class="s">'Incident'</span>, <span class="s">'checkout|timeout|fraud'</span>)
+<span class="k">YIELD</span> node, score
+<span class="k">MATCH</span> (i:Incident) <span class="k">WHERE</span> i.id <span class="k">IN</span> <span class="s">$ids</span>
+<span class="k">OPTIONAL MATCH</span> (i)-[:ROOT_CAUSE]->(rc)
+<span class="k">OPTIONAL MATCH</span> (i)-[:RESOLVED_BY]->(a:Action)
+<span class="k">RETURN</span> i, collect(rc), collect(a)</pre>
+        </div>
+        <div class="stage-row">
+          <div class="idx">3</div>
+          <div><h3>Act, dry run first</h3>
+            <p>Roll back, restart or flip a flag. Each action defaults to a dry run that shows the plan and its blast radius. A Claude Code hook refuses any real action without a matching dry run in the graph from the last 15 minutes, so the safety policy is itself a query.</p>
+            <div class="tools"><span class="pill">rollback_service</span><span class="pill">set_feature_flag</span><span class="pill">restart_service</span></div></div>
+<pre class="code"><span class="c">// PreToolUse guard: no blind remediation</span>
+<span class="k">MATCH</span> (a:Action {kind: <span class="s">$kind</span>, target: <span class="s">$target</span>, dry_run: true})
+<span class="k">WHERE</span> a.at >= <span class="s">$fifteen_minutes_ago</span>
+<span class="k">RETURN</span> count(a)
+
+<span class="c">// every action is explainable later</span>
+(:Action)-[:BECAUSE]->(:Evidence)   (:Action)-[:REVERTS]->(:Change)</pre>
+        </div>
+        <div class="stage-row">
+          <div class="idx">4</div>
+          <div><h3>Verify on the service users hit</h3>
+            <p>Poll the alerting service until it is healthy twice in a row. If it is not, rank again from the new state. The agent is allowed at most three actions.</p>
+            <div class="tools"><span class="pill">verify_recovery</span><span class="pill">get_service_health</span></div></div>
+<pre class="code"><span class="c">verify_recovery(frontend)</span>
+  t=4s   degraded  error 6.7%
+  t=7s   healthy   error 0.0%   p95 112 ms
+  t=10s  healthy   error 0.0%   p95 110 ms   <span class="s">recovered</span></pre>
+        </div>
+        <div class="stage-row">
+          <div class="idx">5</div>
+          <div><h3>Page the owner and remember</h3>
+            <p>Find who is on call through the ownership graph and page them with the evidence path. Resolve the incident with a ROOT_CAUSE edge to the exact change. The next agent, in a different session, finds it.</p>
+            <div class="tools"><span class="pill">notify_owner</span><span class="pill">resolve_incident</span><span class="pill">explain_incident</span></div></div>
+<pre class="code"><span class="k">MATCH</span> (t:Team)-[:OWNS]->(s:Service {name: <span class="s">$s</span>})
+<span class="k">OPTIONAL MATCH</span> (p:Person)-[:ON_CALL_FOR]->(t)
+<span class="k">OPTIONAL MATCH</span> (t)-[:ESCALATES_TO]->(e:Team)<-[:ON_CALL_FOR]-(ep:Person)
+<span class="k">RETURN</span> t.name, p.handle, e.name, ep.handle
+
+(:Incident)-[:ROOT_CAUSE]->(:Change)-[:CHANGED]->(:Service)</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="evidence">
+    <div class="wrap">
+      <div class="eyebrow">Does the graph matter?</div>
+      <h2 style="margin-top:10px">Same model, same actions, with and without the graph</h2>
+      <p class="lede" style="margin-top:14px" id="bench-lede">Each failure is injected into the live stack and the same headless agent runs twice: once with the FalkorDB tools, once with only health, logs and a flat change list. We ran it with full telemetry, where stats say where errors originate the way tracing does, and with basic telemetry that has error rates and latency only.</p>
+      <div class="bench-grid">
+        <div class="bars" id="bars"></div>
+        <div class="findings" id="findings"></div>
+      </div>
+      <div class="table-wrap" style="margin-top:32px"><table id="bench-table"></table></div>
+      <p class="small" style="margin-top:10px" id="bench-note"></p>
+    </div>
+  </section>
+
+  <section class="band" id="install">
+    <div class="wrap">
+      <div class="eyebrow">Runs where you already work</div>
+      <h2 style="margin-top:10px">One MCP server, four ways in</h2>
+      <div class="install">
+        <div class="hosts" role="tablist" aria-label="Agent host" id="hosts"></div>
+        <div>
+          <div class="snippet"><pre class="code" id="snippet"></pre><button class="copy" id="copy">Copy</button></div>
+          <p class="snippet-note" id="snippet-note"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="model">
+    <div class="wrap">
+      <div class="eyebrow">The graph</div>
+      <h2 style="margin-top:10px">Everything the agent knows is a node or an edge</h2>
+      <div class="model">
+<pre class="code"><span class="c">// topology and ownership</span>
+(:Team)-[:OWNS]->(:Service)-[:CALLS {declared, observed}]->(:Service)
+(:Person)-[:ON_CALL_FOR]->(:Team)-[:ESCALATES_TO]->(:Team)
+(:Runbook)-[:FOR]->(:Service)   (:Flag)-[:AFFECTS]->(:Service)
+
+<span class="c">// what changed</span>
+(:Change:Deploy {version, prev_version, at})-[:CHANGED]->(:Service)
+(:Change:FlagChange {flag, from, to, at})-[:TOGGLED]->(:Flag)
+(:Person)-[:AUTHORED]->(:Change)   (:Deploy)-[:ROLLED_BACK]->(:Deploy)
+
+<span class="c">// incident memory and provenance</span>
+(:Incident)-[:IMPACTED]->(:Service)
+(:Incident)-[:ROOT_CAUSE]->(:Change | :Service)
+(:Incident)-[:RESOLVED_BY]->(:Action)-[:BECAUSE]->(:Evidence)
+(:Action)-[:REVERTS]->(:Change)
+(:Investigation)-[:STEP {n, tool, at}]->(<span class="s">any node the agent looked at</span>)</pre>
+        <ul>
+          <li><b>Built from real sources.</b> Services, owners and declared calls come from Docker Compose labels; observed calls and live health from each service's stats; deploys and flag flips from the change log; runbooks from Markdown front-matter.</li>
+          <li><b>Read-only reasoning.</b> Every query the agent's tools run goes through <code>GRAPH.RO_QUERY</code> with a 2 second timeout and a row cap. Only deterministic code writes.</li>
+          <li><b>Idempotent ingest.</b> Every sync is a <code>MERGE</code> on a stable key, so the graph can be rebuilt from its sources at any time.</li>
+          <li><b>Algorithms as tools.</b> <code>algo.betweenness</code> breaks ties between suspects; <code>algo.SPpaths</code> returns the evidence path the agent shows you.</li>
+          <li><b>Investigations are data.</b> Each tool call is a STEP edge to the nodes it looked at. The dashboard and this page replay them.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div>
+      <p><b style="color:var(--ink)">On-Call Graph</b> was built for Graph Hacks: Context for AI Agents (WeMakeDevs × FalkorDB, October 2026). Apache-2.0.</p>
+      <p>Prior art: woodpecker-mcp also keeps a service graph in FalkorDB, with analysis only. AWS DevOps Agent, Datadog Bits AI SRE, Dynatrace and Causely use topology graphs inside their own platforms. On-Call Graph is open, self-hosted, acts and verifies, remembers, and runs inside the agent you already use.</p>
+    </div>
+    <div>
+      <p>Built with Claude Code as a pair programmer. At runtime the agent is Claude, through Claude Code headless or any MCP host. No model training anywhere.</p>
+      <p>The replays on this page are recordings of real runs against the demo stack, played back in your browser.</p>
+    </div>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/force-graph@1.47.4/dist/force-graph.min.js"></script>
+<script id="replays" type="application/json">/*__REPLAYS__*/</script>
+<script id="bench" type="application/json">/*__BENCH__*/</script>
+<script id="site-config" type="application/json">/*__CONFIG__*/</script>
+<script>
+(() => {
+const REPLAYS = JSON.parse(document.getElementById('replays').textContent);
+const BENCH = JSON.parse(document.getElementById('bench').textContent);
+const CONFIG = JSON.parse(document.getElementById('site-config').textContent);
+const ORDER = [
+  { key: 'flag', title: 'Flag flip, three hops down', sub: 'fraud-check slows, frontend fails' },
+  { key: 'pool-after-deploy', title: 'Old bug, new release', sub: 'restart, not rollback' },
+  { key: 'bad-deploy', title: 'Bad deploy, red herring', sub: 'payment v2.4.1' },
+].filter(o => REPLAYS[o.key]);
+const ACTIONS = new Set(['rollback_service', 'restart_service', 'set_feature_flag']);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let C = {};
+const readColors = () => { C = { ok: css('--ok'), warn: css('--warn'), bad: css('--bad'), idle: css('--idle'), ink: css('--ink'), muted: css('--muted'),
+  line: css('--line'), path: css('--path'), pathInk: css('--path-ink'), surface: css('--surface'), accent: css('--accent'), bg: css('--bg') }; };
+readColors();
+const STATUS = s => ({ healthy: C.ok, degraded: C.warn, failing: C.bad, down: C.bad, idle: C.idle }[s] || C.idle);
+const TYPE = {
+  Service: { r: 8 }, Change: { r: 4.5 }, Flag: { r: 4.5 }, Incident: { r: 5.5 }, Action: { r: 4.5 }, Team: { r: 4.5 }, Person: { r: 3.6 }, Runbook: { r: 3.6 },
+};
+const typeColor = t => ({ Change: C.warn, Flag: C.accent, Incident: C.bad, Action: C.ok, Team: '#8d6ad8', Person: '#d0609b', Runbook: C.muted }[t] || C.muted);
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ---------- replay state ----------
+let R = null, t = 0, playing = !reduceMotion, speed = 2, lastFrame = 0, visibleKey = '', visited = new Map(), latest = new Set(), shownSteps = 0;
+let nodeById = new Map();
+const el = document.getElementById('graph');
+const G = ForceGraph()(el)
+  .nodeId('id').backgroundColor('rgba(0,0,0,0)')
+  .linkColor(l => onPath(l) ? C.path : (l.type === 'CALLS' ? C.muted : C.line))
+  .linkWidth(l => onPath(l) ? 2.6 : l.type === 'CALLS' ? 1.3 : 0.6)
+  .linkLineDash(l => l.optional ? [3, 3] : null)
+  .linkDirectionalArrowLength(l => l.type === 'CALLS' ? 4.5 : 0).linkDirectionalArrowRelPos(1)
+  .linkDirectionalParticles(l => l.type === 'CALLS' ? 2 : 0)
+  .linkDirectionalParticleWidth(l => onPath(l) ? 3 : 1.6)
+  .linkDirectionalParticleColor(l => failing(l) ? C.bad : C.accent)
+  .linkDirectionalParticleSpeed(0.006)
+  .nodeCanvasObject(draw)
+  .nodePointerAreaPaint((n, color, ctx) => { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(n.x, n.y, (TYPE[n.type]?.r || 4) + 3, 0, 7); ctx.fill(); })
+  .enableZoomInteraction(false)
+  .autoPauseRedraw(false)
+  .cooldownTicks(140)
+  .onEngineStop(() => G.zoomToFit(500, 64));
+G.d3Force('charge').strength(-55).distanceMax(120);
+const TIGHT = new Set(['CHANGED', 'TOGGLED', 'AFFECTS', 'OWNS', 'ON_CALL_FOR', 'FOR', 'ON']);
+G.d3Force('link').distance(l => l.type === 'CALLS' ? 130 : 30).strength(l => l.type === 'CALLS' ? 0 : TIGHT.has(l.type) ? 0.5 : 0.02);
+new ResizeObserver(() => { G.width(el.clientWidth).height(el.clientHeight); }).observe(el);
+
+const idOf = x => typeof x === 'object' ? x.id : x;
+const healthAt = () => { let f = R.health[0]; for (const h of R.health) { if (h.t <= t) f = h; else break; } return f.s; };
+let H = {};
+const svcStatus = n => (H[n.name] || [n.props.status])[0];
+function onPath(l) { return ['CALLS', 'CHANGED', 'TOGGLED', 'AFFECTS', 'ON_CALL_FOR', 'ROOT_CAUSE', 'REVERTS', 'ON'].includes(l.type) && visited.has(idOf(l.source)) && visited.has(idOf(l.target)); }
+function failing(l) { const n = nodeById.get(idOf(l.target)); return n && n.type === 'Service' && ['failing', 'down', 'degraded'].includes(svcStatus(n)); }
+
+function draw(n, ctx, scale) {
+  const r = TYPE[n.type]?.r || 4;
+  const fill = n.type === 'Service' ? STATUS(svcStatus(n)) : typeColor(n.type);
+  if (visited.has(n.id)) {
+    const pulse = latest.has(n.id) && !reduceMotion ? 2.5 + 2 * Math.sin(performance.now() / 170) : 2;
+    ctx.beginPath(); ctx.arc(n.x, n.y, r + 3 + pulse, 0, 7); ctx.strokeStyle = C.path; ctx.lineWidth = 2.2 / Math.max(scale, .7); ctx.stroke();
+  }
+  ctx.beginPath();
+  if (n.type === 'Change' || n.type === 'Flag') { const k = r + 1.4; ctx.moveTo(n.x, n.y - k); ctx.lineTo(n.x + k, n.y); ctx.lineTo(n.x, n.y + k); ctx.lineTo(n.x - k, n.y); ctx.closePath(); }
+  else if (n.type === 'Team' || n.type === 'Runbook') ctx.rect(n.x - r, n.y - r, 2 * r, 2 * r);
+  else ctx.arc(n.x, n.y, r, 0, 7);
+  ctx.globalAlpha = n.type === 'Incident' ? 0.8 : 1; ctx.fillStyle = fill; ctx.fill(); ctx.globalAlpha = 1;
+  if (n.type === 'Service') { ctx.lineWidth = 1.5 / Math.max(scale, .7); ctx.strokeStyle = C.surface; ctx.stroke(); }
+  const fs = (n.type === 'Service' ? 11.5 : 9) / Math.max(scale, .85);
+  if (n.type === 'Service' || visited.has(n.id)) {
+    ctx.font = `${n.type === 'Service' ? 600 : 500} ${fs}px "IBM Plex Sans", system-ui, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.lineWidth = 3 / Math.max(scale, .85); ctx.strokeStyle = C.bg; ctx.strokeText(n.name, n.x, n.y + r + 3);
+    ctx.fillStyle = n.type === 'Service' ? C.ink : C.muted; ctx.fillText(n.name, n.x, n.y + r + 3);
+  }
+  const steps = visited.get(n.id);
+  if (steps) {
+    const label = steps.length > 3 ? `${steps[0]}…${steps[steps.length - 1]}` : steps.join(',');
+    ctx.font = `700 ${8.5 / Math.max(scale, .85)}px "IBM Plex Mono", monospace`;
+    const w = ctx.measureText(label).width + 6 / scale, h = 11 / scale;
+    ctx.fillStyle = C.path; ctx.fillRect(n.x + r, n.y - r - h, w, h);
+    ctx.fillStyle = C.pathInk; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(label, n.x + r + 3 / scale, n.y - r - h / 2);
+  }
+}
+
+// Services are pinned in call-depth columns: the user-facing service on the left, the deepest
+// dependencies on the right, so a failure visibly travels across the page.
+let PIN = {};
+function layout(rec) {
+  const svc = rec.nodes.filter(n => n.type === 'Service').map(n => n.id);
+  const calls = rec.links.filter(l => l.type === 'CALLS');
+  const callers = new Set(calls.map(l => idOf(l.target)));
+  const roots = svc.filter(id => !callers.has(id));
+  const depth = {}; roots.forEach(r => { depth[r] = 0; });
+  for (let i = 0; i < svc.length; i++) calls.forEach(l => { const a = idOf(l.source), b = idOf(l.target); if (depth[a] !== undefined) depth[b] = Math.max(depth[b] ?? 0, depth[a] + 1); });
+  const cols = {}; svc.forEach(id => { const d = depth[id] ?? 0; (cols[d] = cols[d] || []).push(id); });
+  const maxD = Math.max(...Object.keys(cols).map(Number));
+  PIN = {};
+  Object.entries(cols).forEach(([d, ids]) => {
+    ids.sort();
+    ids.forEach((id, i) => { PIN[id] = { x: (Number(d) - maxD / 2) * 135, y: (i - (ids.length - 1) / 2) * 105 }; });
+  });
+}
+
+// Every other node is pulled toward a "home" near the service it belongs to: changes and flags
+// above their service, owners below, incidents in a memory band along the bottom.
+let HOME = {};
+function homes(rec) {
+  HOME = {};
+  const type = Object.fromEntries(rec.nodes.map(n => [n.id, n.type]));
+  const nbrs = {};
+  rec.links.forEach(l => { const a = idOf(l.source), b = idOf(l.target);
+    (nbrs[a] = nbrs[a] || []).push(b); (nbrs[b] = nbrs[b] || []).push(a); });
+  const avg = ids => { const ps = ids.map(i => PIN[i] || HOME[i]).filter(Boolean); if (!ps.length) return null;
+    return { x: ps.reduce((a, p) => a + p.x, 0) / ps.length, y: ps.reduce((a, p) => a + p.y, 0) / ps.length }; };
+  const off = { Change: [0, -58], Flag: [26, -86], Team: [0, 62], Person: [0, 98], Runbook: [-40, 48], Action: [36, -40] };
+  for (let pass = 0; pass < 3; pass++) {
+    rec.nodes.forEach(n => {
+      if (PIN[n.id] || n.type === 'Incident') return;
+      const svcNbrs = (nbrs[n.id] || []).filter(i => PIN[i]);
+      const base = avg(svcNbrs.length ? svcNbrs : (nbrs[n.id] || []).filter(i => HOME[i] && type[i] !== 'Incident'));
+      if (base) { const [dx, dy] = off[n.type] || [0, 50]; HOME[n.id] = { x: base.x + dx, y: base.y + dy }; }
+    });
+  }
+  const ys = Object.values(PIN).map(p => p.y);
+  const xs = Object.values(PIN).map(p => p.x);
+  const incidents = rec.nodes.filter(n => n.type === 'Incident').sort((a, b) => a.id.localeCompare(b.id));
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  incidents.forEach((n, i) => { HOME[n.id] = { x: minX + (maxX - minX) * (incidents.length > 1 ? i / (incidents.length - 1) : 0.5), y: Math.max(...ys) + 150 }; });
+}
+function homeForce() {
+  let nodes = [];
+  const f = alpha => { nodes.forEach(n => { const h = HOME[n.id]; if (!h || n.fx !== undefined) return;
+    n.vx += (h.x - n.x) * 0.12 * alpha; n.vy += (h.y - n.y) * 0.12 * alpha; }); };
+  f.initialize = ns => { nodes = ns; };
+  return f;
+}
+G.d3Force('home', homeForce());
+
+function load(key) {
+  R = REPLAYS[key]; t = 0; visibleKey = ''; shownSteps = -1; nodeById = new Map();
+  layout(R); homes(R);
+  R.injectT = (R.events.find(e => e.kind === 'inject') || { t: 0 }).t;
+  R.nodes.forEach(n => { n.t = Math.max(0, n.t - 0.5); });
+  document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', b.dataset.key === key));
+  buildTrack(); renderReport(); step(0, true);
+  setTimeout(() => G.zoomToFit(400, 64), 900);
+}
+
+function step(dt, force) {
+  if (!R) return;
+  t = Math.min(R.duration, t + dt);
+  H = healthAt();
+  const nodes = R.nodes.filter(n => n.t <= t);
+  const key = nodes.length + ':' + R.links.filter(l => l.t <= t).length;
+  if (key !== visibleKey || force) {
+    visibleKey = key;
+    const ids = new Set(nodes.map(n => n.id));
+    nodes.forEach(n => {
+      if (nodeById.has(n.id)) return;
+      const copy = { ...n, props: { ...n.props } };
+      if (PIN[n.id]) { copy.fx = PIN[n.id].x; copy.fy = PIN[n.id].y; }
+      else if (HOME[n.id]) { copy.x = HOME[n.id].x + (Math.random() - 0.5) * 10; copy.y = HOME[n.id].y + (Math.random() - 0.5) * 10; }
+      nodeById.set(n.id, copy);
+    });
+    const live = [...nodeById.values()].filter(n => ids.has(n.id));
+    const links = R.links.filter(l => l.t <= t && ids.has(idOf(l.source)) && ids.has(idOf(l.target))).map(l => ({ ...l, source: idOf(l.source), target: idOf(l.target) }));
+    G.graphData({ nodes: live, links });
+  }
+  const steps = R.steps.filter(s => s.t <= t);
+  visited = new Map();
+  steps.forEach(s => s.targets.forEach(id => { if (!visited.has(id)) visited.set(id, []); visited.get(id).push(s.n); }));
+  latest = new Set(steps.length ? steps[steps.length - 1].targets : []);
+  renderHealth(); renderSteps(steps); renderCaption(steps); renderClock();
+  document.getElementById('fill').style.width = (100 * t / R.duration) + '%';
+  document.getElementById('scrub').value = Math.round(1000 * t / R.duration);
+  if (t >= R.duration && playing) { setPlaying(false); document.getElementById('report').open = true; }
+}
+
+function renderHealth() {
+  const order = { down: 0, failing: 1, degraded: 2, healthy: 3, idle: 4 };
+  const rows = Object.entries(H).sort((a, b) => (order[a[1][0]] - order[b[1][0]]) || a[0].localeCompare(b[0]));
+  document.getElementById('health').innerHTML = rows.map(([name, [st, er, p95]]) => `
+    <div class="svc" title="${name}: ${st}"><span class="dot" style="background:${STATUS(st)}"></span><span>${name}</span>
+      <span class="n ${er > 0.03 ? 'bad' : ''}">${st === 'down' ? 'down' : Math.round(er * 100) + '%'}</span>
+      <span class="n ${p95 > 1000 ? 'bad' : ''}">${Math.round(p95)} ms</span></div>`).join('');
+}
+
+function renderSteps(steps) {
+  if (steps.length === shownSteps) return;
+  const box = document.getElementById('steps');
+  if (!steps.length) { box.innerHTML = `<p class="empty">${t < (R.events.find(e => e.kind === 'alert') || {}).t ? 'Waiting for the alert.' : 'Agent is reading the graph.'}</p>`; shownSteps = 0; return; }
+  const grew = steps.length > shownSteps && shownSteps >= 0;
+  box.innerHTML = steps.map((s, i) => `<div class="step ${i === steps.length - 1 ? 'on' : ''} ${grew && i === steps.length - 1 ? 'enter' : ''}">
+    <div class="num">${s.n}</div><div><div class="tool ${ACTIONS.has(s.tool) && !/DRY RUN/.test(s.note) ? 'act' : ''}">${s.tool}</div>
+    <div class="note">${esc(s.note || '')}</div></div></div>`).join('');
+  const sc = box.parentElement; sc.scrollTop = sc.scrollHeight;
+  shownSteps = steps.length;
+}
+
+function renderCaption(steps) {
+  const evs = R.events.filter(e => e.t <= t);
+  const ev = evs[evs.length - 1];
+  const last = steps[steps.length - 1];
+  let chip = 'healthy', cls = '', text = 'Seven services under steady traffic. Every node is in FalkorDB.';
+  if (ev && ev.kind === 'inject') { chip = 'failure'; cls = 'alert'; text = esc(ev.text); }
+  if (ev && ev.kind === 'alert') { chip = 'paged'; cls = 'alert'; text = esc(ev.text) + '. The headless agent starts with only the oncall tools.'; }
+  if (last && (!ev || ev.kind !== 'done' || last.t > ev.t)) { chip = `step ${last.n}`; cls = 'step'; text = `<code>${last.tool}</code> ${esc(last.note || '')}`; }
+  if (ev && ev.kind === 'done' && (!last || ev.t >= last.t)) {
+    chip = 'resolved'; cls = 'ok';
+    text = `Fixed and verified in ${R.agent.duration_s.toFixed(0)} s with ${R.agent.tool_calls} tool calls. The incident and its root cause are now memory.`;
+  }
+  document.getElementById('caption').innerHTML = `<span class="chip ${cls}">${chip}</span><span class="text">${text}</span>`;
+}
+
+function renderClock() {
+  const rel = t - R.injectT;
+  const s = Math.abs(Math.floor(rel));
+  document.getElementById('clock').textContent = `T${rel < 0 ? '−' : '+'}${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function buildTrack() {
+  const track = document.getElementById('track');
+  track.querySelectorAll('.tick, .ev').forEach(x => x.remove());
+  const pct = x => (100 * x / R.duration).toFixed(2) + '%';
+  R.steps.forEach(s => { const d = document.createElement('div'); d.className = 'tick'; d.style.left = pct(s.t); d.title = `${s.n}. ${s.tool}`; track.insertBefore(d, track.querySelector('input')); });
+  const labels = { inject: 'failure', alert: 'alert', done: 'fixed' };
+  R.events.filter(e => labels[e.kind]).forEach(e => {
+    const d = document.createElement('div'); d.className = 'ev ' + e.kind; d.style.left = pct(e.t); d.textContent = labels[e.kind];
+    track.insertBefore(d, track.querySelector('input'));
+  });
+}
+
+function renderReport() {
+  document.getElementById('report-body').innerHTML = md(R.agent.report || '');
+  document.getElementById('report-meta').textContent = `${R.agent.duration_s.toFixed(0)} s · ${R.agent.tool_calls} tool calls · $${(R.agent.cost_usd || 0).toFixed(2)} · recorded ${R.recorded_at}`;
+  document.getElementById('report').open = false;
+}
+
+function setPlaying(p) {
+  playing = p;
+  const b = document.getElementById('play');
+  b.setAttribute('aria-label', p ? 'Pause replay' : 'Play replay');
+  b.innerHTML = p ? '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2" y="1.5" width="3.4" height="11" rx="1" fill="currentColor"/><rect x="8.6" y="1.5" width="3.4" height="11" rx="1" fill="currentColor"/></svg>'
+                  : '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 1.8v10.4L12 7z" fill="currentColor"/></svg>';
+}
+
+function loop(ts) {
+  const dt = lastFrame ? Math.min(0.1, (ts - lastFrame) / 1000) : 0;
+  lastFrame = ts;
+  if (playing) step(dt * speed);
+  requestAnimationFrame(loop);
+}
+
+// tabs + transport
+const tabs = document.getElementById('tabs');
+ORDER.forEach(o => {
+  const b = document.createElement('button'); b.className = 'tab'; b.setAttribute('role', 'tab'); b.dataset.key = o.key;
+  b.innerHTML = `${o.title}<small>${o.sub}</small>`;
+  b.onclick = () => { load(o.key); setPlaying(true); };
+  tabs.appendChild(b);
+});
+document.getElementById('play').onclick = () => { if (t >= R.duration) t = 0; setPlaying(!playing); };
+document.getElementById('restart').onclick = () => { t = 0; shownSteps = -1; visibleKey = ''; nodeById = new Map(); document.getElementById('report').open = false; step(0, true); setPlaying(true); };
+const speeds = [1, 2, 4];
+document.getElementById('speed').onclick = e => { speed = speeds[(speeds.indexOf(speed) + 1) % speeds.length]; e.currentTarget.textContent = speed + '×'; };
+document.getElementById('scrub').oninput = e => { const target = R.duration * e.target.value / 1000; if (target < t) { nodeById = new Map(); visibleKey = ''; shownSteps = -1; } t = target; step(0, true); };
+
+// ---------- facts under the console ----------
+const recs = Object.values(REPLAYS);
+const durs = recs.map(r => r.agent.duration_s);
+document.getElementById('facts').innerHTML = [
+  `<span>Recorded agent runs: <b>${recs.length}</b>, fixed and verified in <b>${Math.min(...durs).toFixed(0)}–${Math.max(...durs).toFixed(0)} s</b> each</span>`,
+  `<span>Tools: <b>17</b> over MCP, <b>3</b> of them change infrastructure</span>`,
+  `<span>Hosts: <b>Claude Code</b> (plugin), <b>Codex</b>, <b>Cursor</b>, headless</span>`,
+].join('');
+
+// ---------- benchmark ----------
+function totals(rows) {
+  const ok = rows.filter(r => !r.error);
+  const sum = k => ok.reduce((a, r) => a + (r[k] || 0), 0);
+  return { n: ok.length, fixed: ok.filter(r => r.correct_action ?? r.fixed).length, logs: sum('logs_read'), calls: sum('tool_calls'),
+           diag: sum('diagnosis_calls'), cost: sum('cost_usd'), time: sum('agent_s') };
+}
+function benchSection() {
+  const tel = [['full', 'With tracing'], ['basic', 'Without tracing']].filter(([k]) => BENCH[k] && BENCH[k].length);
+  if (!tel.length) { document.getElementById('evidence').hidden = true; return; }
+  const T = {};
+  tel.forEach(([k]) => { T[k] = { graph: totals(BENCH[k].filter(r => r.mode === 'graph')), baseline: totals(BENCH[k].filter(r => r.mode === 'baseline')) }; });
+  const metric = (title, key, fmt, unit) => {
+    const max = Math.max(...tel.flatMap(([k]) => [T[k].graph[key], T[k].baseline[key]]), 1e-9);
+    const rows = tel.map(([k, label]) => ['graph', 'baseline'].map(m => `
+      <div class="bar-row"><span class="lbl">${label}, ${m}</span>
+      <span class="bar"><span class="${m === 'graph' ? 'g' : 'b'}" style="width:${(100 * T[k][m][key] / max).toFixed(1)}%"></span></span>
+      <span class="v">${fmt(T[k][m][key])}${unit}</span></div>`).join('')).join('');
+    return `<div><h3>${title}</h3>${rows}</div>`;
+  };
+  const per = k => T[k].graph.n;
+  document.getElementById('bars').innerHTML =
+    `<div class="key"><span><i style="background:var(--ink)"></i>graph tools</span><span><i style="background:var(--idle)"></i>baseline tools</span></div>` +
+    metric('Correct fixes', 'fixed', v => v, ` / ${per(tel[0][0])}`) +
+    metric('Service logs read before the fix', 'logs', v => v, '') +
+    metric('Cost of all runs', 'cost', v => '$' + v.toFixed(2), '');
+  const f = [];
+  const full = T.full, basic = T.basic;
+  if (full) f.push(['', 'With tracing, a frontier model finds the cause either way.', `${full.graph.fixed === full.graph.n && full.baseline.fixed === full.baseline.n ? `Both modes got the fix right in all ${full.graph.n} runs.` : `Graph ${full.graph.fixed} of ${full.graph.n}, baseline ${full.baseline.fixed} of ${full.baseline.n}.`} When every service reports where its errors originate, the answer is close to the health table.`]);
+  if (full && basic) f.push(['key-f', 'The graph sends the agent to where the failure starts.', `It read ${full.graph.logs + basic.graph.logs} service logs before fixing, against ${full.baseline.logs + basic.baseline.logs} for baseline, because the traversal names the origin instead of walking the call chain one hop at a time.`]);
+  if (basic) f.push(['key-f', 'Context decides the hard cases.', `Without tracing, baseline made ${basic.baseline.n - basic.baseline.fixed} wrong call${basic.baseline.n - basic.baseline.fixed === 1 ? '' : 's'} out of ${basic.baseline.n}, the graph agent ${basic.graph.n - basic.graph.fixed}. The typical miss: inventory runs out of DB connections right after a healthy inventory release, and baseline rolls the good release back. The graph agent reads the runbook and the past incident on that node, and restarts.`]);
+  if (full) f.push(['', 'It costs more per incident.', `About ${Math.round(100 * (full.graph.cost / full.baseline.cost - 1))}% more with tracing. Part of that is work the baseline cannot do: open and resolve the incident, page the on-call owner, record why each action was taken.`]);
+  document.getElementById('findings').innerHTML = f.map(([c, b, p]) => `<div class="finding ${c}"><b>${b}</b><p>${p}</p></div>`).join('');
+  const scen = [...new Set(tel.flatMap(([k]) => BENCH[k].map(r => r.scenario)))];
+  const cell = (k, s, m) => {
+    const rs = BENCH[k].filter(r => r.scenario === s && r.mode === m && !r.error);
+    if (!rs.length) return '<td>–</td>';
+    const ok = rs.filter(r => r.correct_action ?? r.fixed).length;
+    return `<td class="${ok === rs.length ? 'hit' : 'miss'}">${ok}/${rs.length}</td>`;
+  };
+  document.getElementById('bench-table').innerHTML =
+    `<thead><tr><th>Scenario</th>${tel.map(([, l]) => `<th>${l}: graph</th><th>${l}: baseline</th>`).join('')}</tr></thead><tbody>` +
+    scen.map(s => `<tr><td class="mono">${s}</td>${tel.map(([k]) => cell(k, s, 'graph') + cell(k, s, 'baseline')).join('')}</tr>`).join('') + '</tbody>';
+  const runs = tel.reduce((a, [k]) => a + BENCH[k].length, 0);
+  document.getElementById('bench-note').textContent = `Correct fix = the expected action on the expected target (rollback payment, flag off, restart inventory). ${runs} runs in total, model Claude Opus 5.5 through Claude Code headless. Small samples: read these as directional.`;
+}
+benchSection();
+
+// ---------- install ----------
+const repo = CONFIG.repo || '';
+const repoSlug = esc(repo.replace(/^https:\/\/github\.com\//, '').replace(/\.git$/, '') || '<owner>/oncall-graph');
+if (repo) { const a = document.getElementById('repo-link'); a.href = repo; a.textContent = 'GitHub'; }
+const HOSTS = [
+  { key: 'claude', title: 'Claude Code', sub: 'Plugin: MCP server, /oncall, /blast-radius, /postmortem, safety hook',
+    code: `<span class="c"># inside Claude Code</span>\n/plugin marketplace add ${repoSlug}\n/plugin install oncall-graph@oncall-graph\n\n<span class="c"># then</span>\n/oncall-graph:oncall checkout is throwing 500s`,
+    note: 'Read tools are pre-approved. Real actions go through Claude Code\'s permission prompt, and the guard hook refuses any action that was not dry-run first, or anything during a change freeze.' },
+  { key: 'codex', title: 'Codex CLI', sub: 'stdio MCP server in config.toml, playbook in AGENTS.md',
+    code: `<span class="c"># ~/.codex/config.toml</span>\n[mcp_servers.oncall]\ncommand = <span class="s">"uv"</span>\nargs = [<span class="s">"run"</span>, <span class="s">"--quiet"</span>, <span class="s">"--directory"</span>, <span class="s">"/abs/path/to/oncall-graph"</span>, <span class="s">"oncall-graph"</span>, <span class="s">"mcp"</span>]\n\n[mcp_servers.oncall.env]\nFALKORDB_URL = <span class="s">"redis://localhost:6380"</span>`,
+    note: 'The same 17 tools. The repository\'s AGENTS.md carries the incident playbook for Codex and other agents that read it.' },
+  { key: 'cursor', title: 'Cursor, VS Code, any MCP host', sub: 'one stdio command',
+    code: `{\n  <span class="s">"mcpServers"</span>: {\n    <span class="s">"oncall"</span>: {\n      <span class="s">"command"</span>: <span class="s">"uv"</span>,\n      <span class="s">"args"</span>: [<span class="s">"run"</span>, <span class="s">"--directory"</span>, <span class="s">"/abs/path/to/oncall-graph"</span>, <span class="s">"oncall-graph"</span>, <span class="s">"mcp"</span>]\n    }\n  }\n}`,
+    note: 'Tools carry MCP annotations: read-only tools are marked readOnlyHint, the three remediation tools destructiveHint, so hosts can ask before acting.' },
+  { key: 'headless', title: 'Headless responder', sub: 'an alert starts the agent with no human present',
+    code: `git clone ${esc(repo || '<repo-url>')} oncall-graph && cd oncall-graph\nuv sync\nuv run oncall-graph demo up      <span class="c"># FalkorDB, 7 services, traffic, history</span>\nuv run oncall-graph ui           <span class="c"># dashboard on localhost:7100</span>\n\nuv run oncall-graph chaos flag   <span class="c"># break something</span>\nuv run oncall-graph watch        <span class="c"># alert -> claude -p with only the oncall tools</span>`,
+    note: 'The watcher pages on the most user-facing failing service, launches Claude Code headless with no shell, file or web tools, and stores the run on an Investigation node. --autonomy propose keeps it to dry runs.' },
+];
+const hostsEl = document.getElementById('hosts');
+let currentHost = HOSTS[0];
+function showHost(h) {
+  currentHost = h;
+  document.querySelectorAll('.host').forEach(b => b.setAttribute('aria-selected', b.dataset.key === h.key));
+  document.getElementById('snippet').innerHTML = h.code;
+  document.getElementById('snippet-note').textContent = h.note;
+}
+HOSTS.forEach(h => {
+  const b = document.createElement('button'); b.className = 'host'; b.setAttribute('role', 'tab'); b.dataset.key = h.key;
+  b.innerHTML = `<b>${h.title}</b><span>${h.sub}</span>`; b.onclick = () => showHost(h); hostsEl.appendChild(b);
+});
+showHost(HOSTS[0]);
+document.getElementById('copy').onclick = async e => {
+  const text = document.getElementById('snippet').textContent;
+  const btn = e.currentTarget;
+  try { await navigator.clipboard.writeText(text); btn.textContent = 'Copied'; }
+  catch { const r = document.createRange(); r.selectNodeContents(document.getElementById('snippet')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = 'Selected'; }
+  setTimeout(() => { btn.textContent = 'Copy'; }, 1600);
+};
+
+// ---------- helpers ----------
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function md(src) {
+  const lines = src.split('\n'); let html = '', list = null, code = null;
+  const inline = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/(^|\W)\*([^*\s][^*]*)\*(?=\W|$)/g, '$1<i>$2</i>');
+  const close = () => { if (list) { html += `</${list}>`; list = null; } };
+  for (const line of lines) {
+    if (line.startsWith('```')) { if (code === null) { close(); code = ''; } else { html += `<pre><code>${esc(code)}</code></pre>`; code = null; } continue; }
+    if (code !== null) { code += line + '\n'; continue; }
+    let m;
+    if ((m = line.match(/^#{1,4}\s+(.*)/))) { close(); html += `<h3>${inline(m[1])}</h3>`; }
+    else if ((m = line.match(/^\s*[-*]\s+(.*)/))) { if (list !== 'ul') { close(); html += '<ul>'; list = 'ul'; } html += `<li>${inline(m[1])}</li>`; }
+    else if ((m = line.match(/^\s*\d+\.\s+(.*)/))) { if (list !== 'ol') { close(); html += '<ol>'; list = 'ol'; } html += `<li>${inline(m[1])}</li>`; }
+    else if (line.trim() === '') { close(); }
+    else if (line.startsWith('|')) { close(); html += `<p class="mono" style="font-size:.78rem;white-space:pre;overflow-x:auto">${esc(line)}</p>`; }
+    else { close(); html += `<p>${inline(line)}</p>`; }
+  }
+  close(); return html;
+}
+
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readColors(); });
+new MutationObserver(readColors).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+const params = new URLSearchParams(location.search);
+setPlaying(playing);
+load(params.get('scenario') && REPLAYS[params.get('scenario')] ? params.get('scenario') : ORDER[0].key);
+if (params.get('t')) { setPlaying(false); step(Number(params.get('t')), true); }
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

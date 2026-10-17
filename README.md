@@ -7,7 +7,10 @@ on its own when an alert fires.
 > Graph Hacks: Context for AI Agents (WeMakeDevs × FalkorDB, Oct 2026)
 > **Tracks:** 01 Agents That Act on Connected Data (primary) · 02 Agent Memory and Coordination
 
-![On-Call Graph UI](docs/screenshot.png)
+**Website with in-browser replays of real incidents:** `site/index.html` (published to GitHub Pages
+by `.github/workflows/pages.yml`; open it locally with no server needed).
+
+![On-Call Graph console](docs/screenshot.png)
 
 ## The problem
 
@@ -103,8 +106,18 @@ uv run oncall-graph chaos flag     # or: bad-deploy | pool
 uv run oncall-graph watch --once   # alert fires → headless Claude Code investigates, fixes, verifies
 ```
 
-You can also click **Break** and then **Run agent** in the UI and watch the path light up.
-`uv run oncall-graph demo reset` brings everything back to a healthy baseline.
+Or do it all from the console at http://localhost:7100:
+
+- **Break something** picks any of the six scenarios.
+- **graph / baseline** switches which toolset the agent gets.
+- **Run agent** starts the headless agent.
+
+While it runs, the path lights up step by step. Click a step to see what it looked at, or click any
+node for its properties. The **Incident memory** tab shows every incident with its root cause and fix,
+and compares mean time to resolve for humans and the agent. **Changes** lists recent deploys and flag flips.
+
+**Reset** restores a healthy state but keeps the graph, so the next incident can find the memory
+the last one wrote. Shift-click Reset for a fresh graph, or run `uv run oncall-graph demo reset`.
 
 | Scenario | What happens | Correct fix | Red herring |
 |---|---|---|---|
@@ -182,6 +195,32 @@ directional, not statistically significant.
   person, write the root cause into memory, and record provenance for every action.
 - Next steps: bigger topologies (a flat change list and hop-by-hop log reading grow with the org;
   `rank_suspects` doesn't), and repeated runs for confidence intervals.
+
+## Website and incident replays
+
+`uv run oncall-graph record <scenario> --out site/data/<scenario>.json` records a real incident end
+to end: live health every second, every graph node and edge as it appears, and every agent step
+with its timestamp and the nodes it touched. `python3 site/build.py` inlines the recordings and the
+benchmark results into one self-contained `site/index.html`. The page replays the incidents in the
+browser with a scrubbable timeline, so anyone can watch the agent work without Docker or an API key.
+Pushing to GitHub publishes it through GitHub Pages; set *Settings → Pages → Source* to *GitHub Actions* once.
+
+## Tests
+
+```bash
+uv run pytest tests/test_unit.py          # 16 fast tests, no Docker needed (also run in CI)
+uv run pytest tests/test_integration.py   # 14 end-to-end tests against the live demo stack (~7 min)
+```
+
+The integration suite does three things against the live stack:
+
+- It injects every scenario and checks that `rank_suspects` finds the service where the failure
+  starts, with red herrings scored low.
+- It takes the full fix loop through the real action tools: dry run, execute, verify, page the owner,
+  resolve, explain, recall from memory.
+- It checks the guarantees: rollback never redeploys a release that was itself rolled back,
+  `ONCALL_ALLOW_ACTIONS=0` forces dry runs, the agent's Cypher is read-only, and bad input returns
+  an error instead of crashing.
 
 ## Graph data model
 
@@ -301,14 +340,33 @@ acts and verifies, remembers, and runs inside whichever agent you already use.
 
 ```
 oncall_graph/   tools.py (agent tools) · mcp_server.py · ingest.py · seed.py · infra.py · responder.py
-                bench.py · web.py · guard.py · store.py · cli.py
+                bench.py · record.py · web.py · guard.py · store.py · cli.py
 demo/           docker-compose.yml · service/ (one configurable microservice) · teams.json · runbooks/ · flags/
 skills/         oncall · blast-radius · postmortem (Claude Code plugin skills)
 hooks/          hooks.json (PreToolUse guard)
 .claude-plugin/ plugin.json (MCP server inline) · marketplace.json
 prompts/        headless agent playbooks
-ui/             index.html (force-graph)
+ui/             index.html (operator console)
+site/           src/index.html (website) · data/ (recorded incidents) · build.py
+bench/          results-*.json and RESULTS-*.md (graph vs baseline)
+tests/          test_unit.py · test_integration.py
+docs/           DEMO_SCRIPT.md · BLOG.md · SUBMISSION.md · screenshots
 ```
+
+### CLI
+
+| command | what it does |
+|---|---|
+| `oncall-graph demo up / down / reset [--soft]` | run, stop or reset the demo stack |
+| `oncall-graph chaos <scenario>` | inject a failure (`bad-deploy`, `flag`, `pool`, `deploy-noise`, `flag-collision`, `pool-after-deploy`) |
+| `oncall-graph status` | live health table |
+| `oncall-graph ui` | operator console on :7100 |
+| `oncall-graph mcp [--mode graph\|baseline]` | MCP server on stdio |
+| `oncall-graph watch [--once] [--autonomy propose]` | alert watcher that launches the headless agent |
+| `oncall-graph bench [--scenario ...] [--repeats N]` | graph vs baseline benchmark |
+| `oncall-graph record <scenario> --out file.json` | record an incident for the website |
+| `oncall-graph call <tool> key=value ...` | call any agent tool directly |
+| `oncall-graph sync` | rebuild the graph from its sources |
 
 ## AI assistance disclosure
 

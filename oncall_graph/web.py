@@ -129,3 +129,37 @@ def agent(mode: str = "graph"):
     if not hit:
         raise HTTPException(400, "no failing service right now")
     return _background(f"agent investigating {hit[0]} ({mode})", lambda: run_agent(hit[0], hit[1], mode=mode, quiet=True))
+
+
+@app.get("/api/scenarios")
+def scenarios():
+    from .cli import SCENARIOS
+    return SCENARIOS
+
+
+@app.get("/api/incidents")
+def incidents():
+    rows = store.read(
+        """MATCH (i:Incident)
+           OPTIONAL MATCH (i)-[:ROOT_CAUSE]->(rc)
+           OPTIONAL MATCH (i)-[:RESOLVED_BY]->(a:Action)
+           RETURN i.id AS id, i.title AS title, i.status AS status, i.severity AS severity, i.opened_at AS opened_at,
+                  i.mttr_min AS mttr_min, i.source AS source, i.summary AS summary,
+                  collect(DISTINCT coalesce(rc.name, rc.version, rc.flag)) AS root_cause,
+                  collect(DISTINCT {kind: a.kind, target: a.target, by: a.by}) AS fixed_by
+           ORDER BY opened_at DESC""")
+    for r in rows:
+        r["fixed_by"] = [a for a in r["fixed_by"] if a.get("kind")]
+        r["root_cause"] = [x for x in r["root_cause"] if x]
+    return rows
+
+
+@app.get("/api/changes")
+def changes(hours: float = 24.0):
+    rows = store.read(
+        """MATCH (c:Change) WHERE c.at >= $since
+           OPTIONAL MATCH (c)-[:CHANGED]->(s:Service)
+           OPTIONAL MATCH (c)-[:TOGGLED]->(:Flag)-[:AFFECTS]->(fs:Service)
+           RETURN c, coalesce(s.name, fs.name) AS service ORDER BY c.at DESC LIMIT 40""",
+        {"since": time.time() - hours * 3600})
+    return [{**{k: v for k, v in r["c"].items() if not k.startswith("_")}, "service": r["service"]} for r in rows]
