@@ -31,14 +31,15 @@ def mcp_config(mode: str, investigation_id: str) -> str:
 
 
 def detect(window: float = 10) -> tuple[str, dict] | None:
-    """The most upstream failing service (user-facing first) or None."""
+    """Something is failing -> alert on the most user-facing unhealthy service (that's where the
+    impact is felt), not on whichever internal service crossed the threshold first."""
     snap = infra.all_stats(window)
-    failing = [n for n, s in snap.items() if s["status"] in ("failing", "down")]
-    if not failing:
+    if not any(s["status"] in ("failing", "down") for s in snap.values()):
         return None
     svcs = infra.services()
-    failing.sort(key=lambda n: (not svcs[n]["internet_facing"], svcs[n]["tier"]))
-    return failing[0], snap[failing[0]]
+    unhealthy = [n for n, s in snap.items() if s["status"] in ("failing", "down", "degraded")]
+    unhealthy.sort(key=lambda n: (not svcs[n]["internet_facing"], svcs[n]["tier"], snap[n].get("error_rate", 1) * -1))
+    return unhealthy[0], snap[unhealthy[0]]
 
 
 def run_agent(alert_service: str, alert: dict, mode: str = "graph", autonomy: str = "auto",

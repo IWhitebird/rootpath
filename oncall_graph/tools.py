@@ -409,13 +409,18 @@ def query_graph(cypher: str) -> dict:
 
 def open_incident(title: str, symptom: str, impacted_services: list[str], severity: str = "SEV2") -> dict:
     """Open an incident in the graph (or return the one already open for these services)."""
-    existing = store.read("MATCH (i:Incident {status: 'open'}) RETURN i.id AS id, i.title AS title ORDER BY i.opened_at DESC LIMIT 1")
+    now = time.time()
+    existing = store.read(
+        """MATCH (i:Incident {status: 'open'})-[:IMPACTED]->(s:Service)
+           WHERE i.opened_at >= $since AND s.name IN $services
+           RETURN DISTINCT i.id AS id ORDER BY id DESC LIMIT 1""",
+        {"since": now - 1800, "services": impacted_services})
     if existing:
         inc_id = existing[0]["id"]
     else:
-        n = store.read("MATCH (i:Incident) RETURN count(i) AS n")[0]["n"]
-        inc_id = f"INC-{40 + n:03d}"
-        now = time.time()
+        nums = [int(r["id"].split("-")[1]) for r in store.read("MATCH (i:Incident) RETURN i.id AS id")
+                if r["id"].split("-")[-1].isdigit()]
+        inc_id = f"INC-{max(nums + [42]) + 1:03d}"
         store.query(
             """CREATE (i:Incident {id: $id, title: $title, symptom: $symptom, severity: $sev, status: 'open',
                                    opened_at: $now, opened_iso: $iso, source: 'agent'})""",
@@ -454,12 +459,20 @@ def _blocked(dry_run: bool) -> bool:
 def rollback_service(service: str, reason: str, incident_id: str | None = None, dry_run: bool = True) -> dict:
     """Redeploy the version that ran before the latest deploy of `service`."""
     ingest.sync_changes()
-    current = store.read(
-        """MATCH (d:Deploy)-[:CHANGED]->(:Service {name: $s}) RETURN d ORDER BY d.at DESC LIMIT 1""", {"s": service})
-    if not current or not current[0]["d"].get("prev_version"):
-        return {"error": f"no previous version recorded for {service}; cannot roll back"}
-    cur = current[0]["d"]
-    target = cur["prev_version"]
+    if service not in infra.services():
+        return {"error": f"unknown service '{service}'", "known": sorted(infra.services())}
+    history = store.read(
+        """MATCH (d:Deploy)-[:CHANGED]->(:Service {name: $s})
+           OPTIONAL MATCH (r:Deploy)-[:ROLLED_BACK]->(d)
+           RETURN d, count(r) > 0 AS rolled_back ORDER BY d.at DESC""", {"s": service})
+    if not history:
+        return {"error": f"no deploy history for {service}; cannot roll back"}
+    cur = history[0]["d"]
+    # Never "roll back" onto a version that was itself rolled back (a known-bad release).
+    bad = {h["d"]["version"] for h in history if h["rolled_back"]} | {cur["version"]}
+    target = next((h["d"]["version"] for h in history[1:] if h["d"]["version"] not in bad), None)
+    if not target:
+        return {"error": f"no known-good earlier version of {service} to roll back to"}
     plan = {"service": service, "from_version": cur["version"], "to_version": target,
             "reverts_change": _change_view(cur), "blast_radius": [r["service"] for r in get_blast_radius(service)["affected_if_it_fails (upstream callers)"]]}
     if _blocked(dry_run):
