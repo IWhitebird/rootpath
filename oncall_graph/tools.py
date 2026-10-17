@@ -89,6 +89,8 @@ def _change_view(c: dict) -> dict:
 def _health_view(s: dict) -> dict:
     keys = ("status", "version", "requests", "error_rate", "errors_originated_here", "errors_from_dependencies",
             "p95_ms", "error")
+    if config.TELEMETRY == "basic":
+        keys = tuple(k for k in keys if not k.startswith("errors_"))
     return {k: s[k] for k in keys if k in s}
 
 
@@ -183,27 +185,35 @@ def rank_suspects(symptom_service: str, window_minutes: int = 60) -> dict:
             score += 0.3
             reasons.append("not responding at all")
         n, own = st.get("requests", 0), st.get("errors_originated_here", 0)
+        if config.TELEMETRY == "basic":
+            own = 0  # no tracing: we don't know where errors originate, only the topology tells us
         if n and own / n > 0.05:
             score += 0.2 * min(1.0, 2 * own / n)
             reasons.append(f"{own}/{n} requests failed inside this service itself")
         if st.get("p95_ms", 0) > config.SLOW_P95_MS:
-            score += 0.15
-            reasons.append(f"p95 latency {st['p95_ms']:.0f}ms (threshold {config.SLOW_P95_MS:.0f}ms)")
+            score += 0.15 if (deepest or not unhealthy) else 0.0
+            reasons.append(f"p95 latency {st['p95_ms']:.0f}ms (threshold {config.SLOW_P95_MS:.0f}ms)"
+                           + ("" if deepest or not unhealthy else ", inherited from its dependencies"))
         recent = changes.get(name, [])
         if recent:
             newest = max(recent, key=lambda x: x["at"])
             freshness = max(0.0, 1 - (time.time() - newest["at"]) / (window_minutes * 60))
-            score += (0.35 if unhealthy else 0.05) * (0.5 + 0.5 * freshness)
+            weight = 0.35 if deepest or st["status"] == "down" else 0.1 if unhealthy else 0.05
+            score += weight * (0.5 + 0.5 * freshness)
             for ch in recent:
                 v = _change_view(ch)
                 what = (f"deployed v{v['version']} (from v{v['prev_version']})" if v["kind"] == "deploy"
                         else f"flag '{v['flag']}' set {v['from']} -> {v['to']}")
-                reasons.append(f"{what} {v['when']} by {v['author']}" + ("" if unhealthy else " (but service looks healthy)"))
+                reasons.append(f"{what} {v['when']} by {v['author']}" + (
+                    "" if deepest else " (but its errors are inherited)" if unhealthy else " (but service looks healthy)"))
         score += 0.05 * centrality.get(name, 0) / top_c
         suspects.append({
-            "service": name, "score": round(score, 3), "hops_from_symptom": c["hops"],
-            "health": _health_view(st), "recent_changes": [_change_view(x) for x in recent],
+            "service": name, "score": round(score, 3), "hops": c["hops"], "status": st["status"],
+            "error_rate": st.get("error_rate"),
+            **({} if config.TELEMETRY == "basic" else {"errors_originated_here": st.get("errors_originated_here")}),
+            "p95_ms": st.get("p95_ms"), "recent_changes": [_change_line(x) for x in recent],
             "betweenness": centrality.get(name, 0), "reasons": reasons or ["healthy, no recent changes"],
+            "_changes": recent,
         })
     suspects.sort(key=lambda s: -s["score"])
 
@@ -217,19 +227,32 @@ def rank_suspects(symptom_service: str, window_minutes: int = 60) -> dict:
     path = _path(symptom_service, top["service"])["path"] if top["service"] != symptom_service else [symptom_service]
 
     touched = [("Service", symptom_service)] + [("Service", s["service"]) for s in suspects[:3]]
-    touched += [("Change", ch["id"]) for s in suspects[:2] for ch in s["recent_changes"]]
+    touched += [("Change", ch["id"]) for s in suspects[:2] for ch in s["_changes"]]
     _trace("rank_suspects", f"top suspect {top['service']} (score {top['score']}) via path {' -> '.join(path)}", touched)
+    for s in suspects:
+        del s["_changes"]
+    detailed = [s for s in suspects if s["score"] >= 0.1][:3] or suspects[:1]
+    rest = [{"service": s["service"], "score": s["score"], "status": s["status"], "why_low": s["reasons"][0]}
+            for s in suspects if s not in detailed]
     return {
         "symptom_service": symptom_service,
-        "window_minutes": window_minutes,
         "top_suspect": top["service"],
         "path_from_symptom": path,
-        "suspects": suspects[:5],
+        "suspects": detailed,
+        "other_services_on_the_path": rest,
         "ruled_out_changes (not in the dependency graph of the symptom)": [
-            {**_change_view(r["change"]), "target": r["target"]} for r in outside],
-        "how_scored": "deepest unhealthy node +0.4, down +0.3, errors originating here +0.2, slow +0.15, "
-                      "recent change on an unhealthy node +0.35 (fresher = more), betweenness tie-break +0.05",
+            f"{_change_line(r['change'])} -> {r['target']}" for r in outside],
+        "scoring": "deepest unhealthy +0.4, down +0.3, own errors +0.2, slow +0.15 and fresh change +0.35 (only where the failure starts)",
     }
+
+
+def _change_line(c: dict) -> str:
+    v = _change_view(c)
+    if v["kind"] == "deploy":
+        return f"{v['id']}: deploy {v['service']} v{v['prev_version']} -> v{v['version']} by {v['author']} {v['when']}" + (
+            f" ({v['note']})" if v.get("note") else "")
+    return f"{v['id']}: flag {v['flag']} {v['from']} -> {v['to']} by {v['author']} {v['when']}" + (
+        f" ({v['note']})" if v.get("note") else "")
 
 
 def recent_changes(service: str | None = None, minutes: int = 120, include_dependencies: bool = True) -> dict:
@@ -303,7 +326,7 @@ def get_logs(service: str, lines: int = 200, contains: str | None = None) -> dic
         "service": service,
         "entries_scanned": len(entries),
         "distinct_messages": [{"count": n, "message": m[:900]} for m, n in counts.most_common(6)],
-        "latest": [e[:400] for e in entries[-4:]],
+        "latest_timestamps": [e.split(" ", 1)[0] + " " + e.split("\n", 1)[0].split("] ", 1)[-1][:160] for e in entries[-3:]],
     }
 
 

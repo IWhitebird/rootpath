@@ -66,7 +66,8 @@ def sync_health() -> dict:
             {"name": name, "status": s["status"], "error_rate": s.get("error_rate", 1.0),
              "p95": s.get("p95_ms", 0.0), "version": s.get("version", infra.read_env(name).get("VERSION")), "now": now},
         )
-        for dep, count in (s.get("calls_total") or {}).items():
+        observed = {} if config.TELEMETRY == "basic" else (s.get("calls_total") or {})
+        for dep, count in observed.items():  # observed call edges come from tracing data
             store.query(
                 """MATCH (a:Service {name: $a}), (b:Service {name: $b})
                    MERGE (a)-[r:CALLS]->(b)

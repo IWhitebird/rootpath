@@ -119,15 +119,16 @@ def write_env(service: str, env: dict) -> None:
 
 
 def deploy(service: str, version: str, bug: str = "", author: str = "ci", note: str = "",
-           rollback_of: str | None = None) -> dict:
+           rollback_of: str | None = None, at: float | None = None) -> dict:
     """Ship `version` of `service`: rewrite its env file and recreate the container."""
     prev = read_env(service).get("VERSION")
     write_env(service, {"VERSION": version, "BUG": bug})
     compose("up", "-d", "--no-deps", service)
-    return append_change({
-        "kind": "deploy", "service": service, "version": version, "prev_version": prev,
-        "bug": bug, "author": author, "note": note, "rollback_of": rollback_of,
-    })
+    change = {"kind": "deploy", "service": service, "version": version, "prev_version": prev,
+              "bug": bug, "author": author, "note": note, "rollback_of": rollback_of}
+    if at:
+        change["at"] = at
+    return append_change(change)
 
 
 def restart(service: str) -> None:

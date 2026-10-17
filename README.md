@@ -147,11 +147,41 @@ Use `--autonomy propose` for dry-run-only recommendations.
 
 ## Does the graph matter? (benchmark)
 
-`uv run oncall-graph bench` runs every scenario twice, with the same model and the same remediation
-actions. The **graph** mode gets the FalkorDB reasoning tools. The **baseline** mode gets what a plain
-observability stack gives you (health, logs, a flat change log).
+`uv run oncall-graph bench` injects each failure into the live stack and runs the same headless
+agent (Claude Opus 5.5) twice. Both runs have the same remediation actions. **graph** gets the
+FalkorDB reasoning and memory tools. **baseline** gets what a plain observability stack gives you:
+health, logs and a flat change log. We ran it with full telemetry (stats include where errors
+originate, like distributed tracing) and with basic telemetry (`ONCALL_TELEMETRY=basic`: error rate
+and latency only).
 
-See [`bench/RESULTS.md`](bench/RESULTS.md) for the latest numbers.
+| telemetry | mode | correct fix | logs read before the fix | total tool calls | agent time | cost |
+|---|---|---|---|---|---|---|
+| full | graph | 6/6 | 6 | 65 | 297s | $0.86 |
+| full | baseline | 6/6 | 10 | 46 | 285s | $0.66 |
+| basic (no tracing) | graph | **6/6** | **7** | 66 | 315s | $0.91 |
+| basic (no tracing) | baseline | **5/6** | 15 | 46 | 243s | $0.62 |
+
+Per-scenario tables and tool sequences: [`bench/RESULTS-full.md`](bench/RESULTS-full.md) and
+[`bench/RESULTS-basic.md`](bench/RESULTS-basic.md). This is one run per cell, so the numbers are
+directional, not statistically significant.
+
+**What we learned:**
+
+- **A frontier model with good telemetry on a 7-service system finds the root cause without a graph.**
+  We didn't expect baseline to fail on the easy scenarios, and it didn't.
+- **The graph roughly halves the logs the agent reads** (6 vs 10; 7 vs 15). `rank_suspects` sends it
+  straight to the service where the failure starts, instead of walking the logs hop by hop.
+- **The one wrong call happened exactly where graph context matters.** `pool-after-deploy`: inventory's
+  DB pool is exhausted 14 minutes after a healthy inventory release. Without tracing, baseline blamed the
+  release and **rolled back a good version**. The system recovered by side effect (recreating the
+  container cleared the pool), but the diagnosis was wrong and the leak will come back. The graph agent
+  pulled INC-019 and runbook RB-INV-01 from the graph, restarted instead, and wrote down why it ignored
+  the recent deploy.
+- **The graph agent costs about 40% more per incident.** Its tool results are larger, it has more tools,
+  and it does work baseline has no way to do: open and resolve the incident, page the right on-call
+  person, write the root cause into memory, and record provenance for every action.
+- Next steps: bigger topologies (a flat change list and hop-by-hop log reading grow with the org;
+  `rank_suspects` doesn't), and repeated runs for confidence intervals.
 
 ## Graph data model
 

@@ -59,7 +59,7 @@
   <button class="danger" data-chaos="flag" title="fraud_model_v2 flag slows fraud-check (+ red-herring notify deploy)">Break: flag flip</button>
   <button class="danger" data-chaos="pool" title="inventory DB pool exhausted, no change at all">Break: pool</button>
   <button class="primary" id="run">Run agent</button>
-  <button id="reset">Reset</button>
+  <button id="reset" title="restore healthy state, keep incident memory (shift-click: fresh graph)">Reset</button>
   <div id="busy"></div>
 </header>
 <main>
@@ -229,7 +229,7 @@ async function post(url) {
 }
 document.querySelectorAll('[data-chaos]').forEach(b => b.onclick = () => post(`/api/chaos/${b.dataset.chaos}`));
 document.getElementById('run').onclick = () => post('/api/agent?mode=graph');
-document.getElementById('reset').onclick = () => post('/api/reset');
+document.getElementById('reset').onclick = e => post(e.shiftKey ? '/api/reset?hard=true' : '/api/reset');
 
 function tick(fn, ms) { const run = () => fn().catch(() => {}).finally(() => setTimeout(run, ms)); run(); }
 tick(loadGraph, 4000); tick(loadHealth, 2000); tick(loadInvestigation, 1500);

@@ -30,8 +30,29 @@ def demo_down(args) -> None:
     infra.compose("down", *(["-v"] if args.volumes else []), timeout=300)
 
 
+def demo_soft_reset() -> None:
+    """Back to healthy, but keep the graph (incident memory survives): differences from the
+    baseline are undone through recorded deploys and flag changes, like a real revert."""
+    from . import infra, ingest
+    base = json.loads((config.DEMO / "baseline.json").read_text())
+    for service, env in base["services"].items():
+        if infra.read_env(service).get("VERSION") != env["VERSION"] or infra.read_env(service).get("BUG"):
+            infra.deploy(service, env["VERSION"], author="release-bot", note="reset to stable release")
+    flags = infra.read_flags()
+    for flag, value in base["flags"].items():
+        if flags.get(flag) != value:
+            infra.set_flag(flag, value, author="release-bot", note="reset to default")
+    infra.restart("inventory")
+    ingest.sync_changes()
+    time.sleep(5)
+    ingest.sync_health()
+    print("soft reset: services healthy, incident memory kept")
+
+
 def demo_reset(args) -> None:
     """Back to a clean, healthy baseline with fresh history."""
+    if args is not None and getattr(args, "soft", False):
+        return demo_soft_reset()
     from . import infra, ingest, seed, store
     seed.write_baseline()
     infra.compose("up", "-d", "--remove-orphans", timeout=300)
@@ -53,7 +74,18 @@ SCENARIOS = {
     "bad-deploy": "payment v2.4.1 ships a card tokenizer bug (+ an unrelated catalog deploy as a red herring)",
     "flag": "fraud_model_v2 flag turned on: fraud-check latency breaks payment (+ an unrelated notify deploy)",
     "pool": "inventory's DB connection pool gets exhausted: no change at all, restart needed",
+    "deploy-noise": "busy deploy hour (5 healthy deploys, two on the failing path) + payment v2.4.1 tokenizer bug",
+    "flag-collision": "fraud-check v1.9.3 deployed 3 min before fraud_model_v2 is ramped: two changes on the slow service",
+    "pool-after-deploy": "inventory pool exhaustion right after an unrelated, healthy inventory release",
 }
+
+
+def _busy_hour(deploys: list[tuple]) -> None:
+    """Real (healthy) deploys, back-dated into the last hour like a normal busy release day."""
+    from . import infra
+    for service, version, author, note, minutes_ago in deploys:
+        infra.deploy(service, version, author=author, note=note, at=time.time() - minutes_ago * 60)
+    time.sleep(15)  # let the restarts settle so they don't look like the incident
 
 
 def chaos(args) -> None:
@@ -68,6 +100,18 @@ def chaos(args) -> None:
         time.sleep(1)
         infra.set_flag("fraud_model_v2", True, author="omar", note="ramp v2 fraud model to 100%")
     elif s == "pool":
+        infra.chaos_pool_exhaust("inventory")
+    elif s == "deploy-noise":
+        _busy_hour([("inventory", "5.1.2", "sam", "pgbouncer config bump", 41), ("frontend", "2.8.1", "meera", "header copy", 35),
+                    ("checkout", "4.2.1", "kabir", "coupon validation", 22), ("catalog", "3.1.0", "zoya", "search ranking tweak", 12),
+                    ("notify", "1.2.1", "li", "email template copy change", 6)])
+        infra.deploy("payment", "2.4.1", bug="null_pointer", author="riya", note="saved-card tokenization refactor")
+    elif s == "flag-collision":
+        _busy_hour([("checkout", "4.2.1", "kabir", "coupon validation", 25), ("notify", "1.2.1", "li", "email template copy change", 10),
+                    ("fraud-check", "1.9.3", "omar", "feature extraction cleanup", 3)])
+        infra.set_flag("fraud_model_v2", True, author="omar", note="ramp v2 fraud model to 100%")
+    elif s == "pool-after-deploy":
+        _busy_hour([("checkout", "4.2.1", "kabir", "coupon validation", 30), ("inventory", "5.1.2", "sam", "pgbouncer config bump", 14)])
         infra.chaos_pool_exhaust("inventory")
     print(f"injected: {SCENARIOS[s]}")
 
@@ -138,7 +182,9 @@ def main() -> None:
     down = d.add_parser("down")
     down.add_argument("--volumes", action="store_true")
     down.set_defaults(fn=demo_down)
-    d.add_parser("reset").set_defaults(fn=demo_reset)
+    r = d.add_parser("reset")
+    r.add_argument("--soft", action="store_true", help="keep the graph (incident memory), only restore healthy state")
+    r.set_defaults(fn=demo_reset)
     c = sub.add_parser("chaos", help="inject a failure scenario")
     c.add_argument("scenario", choices=list(SCENARIOS))
     c.set_defaults(fn=chaos)

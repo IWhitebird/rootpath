@@ -114,9 +114,11 @@ def chaos(scenario: str):
 
 
 @app.post("/api/reset")
-def reset():
-    from .cli import demo_reset
-    return _background("resetting demo", lambda: demo_reset(None))
+def reset(hard: bool = False):
+    from .cli import demo_reset, demo_soft_reset
+    if hard:
+        return _background("resetting demo (fresh graph)", lambda: demo_reset(None))
+    return _background("restoring healthy state", demo_soft_reset)
 
 
 @app.post("/api/agent")

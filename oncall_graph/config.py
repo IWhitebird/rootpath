@@ -27,3 +27,7 @@ ALLOW_ACTIONS = os.environ.get("ONCALL_ALLOW_ACTIONS", "1") == "1"
 NOTIFY_WEBHOOK = os.environ.get("ONCALL_NOTIFY_WEBHOOK", "")  # Slack or Discord incoming webhook
 
 QUERY_TIMEOUT_MS = int(os.environ.get("ONCALL_QUERY_TIMEOUT_MS", "2000"))
+
+# "full" = per-service stats include where errors originate (what distributed tracing gives you).
+# "basic" = error rate + latency only (no tracing); the agent must infer propagation itself.
+TELEMETRY = os.environ.get("ONCALL_TELEMETRY", "full")

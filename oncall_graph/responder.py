@@ -19,6 +19,7 @@ def mcp_config(mode: str, investigation_id: str) -> str:
     path = config.ROOT / ".oncall" / f"mcp-{mode}-{investigation_id}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     env = {"ONCALL_MODE": mode, "ONCALL_INVESTIGATION_ID": investigation_id, "ONCALL_AGENT": f"headless-{mode}",
+           "ONCALL_TELEMETRY": config.TELEMETRY,
            "FALKORDB_URL": os.environ.get("FALKORDB_URL", f"redis://{config.FALKORDB_HOST}:{config.FALKORDB_PORT}")}
     if config.NOTIFY_WEBHOOK:
         env["ONCALL_NOTIFY_WEBHOOK"] = config.NOTIFY_WEBHOOK
