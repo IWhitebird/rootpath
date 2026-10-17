@@ -216,6 +216,11 @@ def rank_suspects(symptom_service: str, window_minutes: int = 60) -> dict:
             "_changes": recent,
         })
     suspects.sort(key=lambda s: -s["score"])
+    if all(s["status"] not in UNHEALTHY for s in suspects):
+        _trace("rank_suspects", f"everything downstream of {symptom_service} is healthy", [("Service", symptom_service)])
+        return {"symptom_service": symptom_service, "top_suspect": None,
+                "note": "every service on this dependency path is healthy right now; nothing to rank",
+                "services_checked": [s["service"] for s in suspects]}
 
     outside = store.read(
         """MATCH (c:Change) WHERE c.at >= $since
@@ -354,7 +359,8 @@ def get_owner(service: str) -> dict:
 def find_similar_incidents(symptom: str, service: str | None = None, limit: int = 3) -> dict:
     """Search incident memory: full-text match on past symptoms, boosted when the past incident
     involved the same service. Returns root causes and what fixed them."""
-    words = [w for w in re.findall(r"[A-Za-z_][A-Za-z0-9_.-]{3,}", symptom)][:12]
+    # RediSearch syntax: '-' negates and '.' separates, so query on plain alphanumeric words only.
+    words = list(dict.fromkeys(w.lower() for w in re.findall(r"[A-Za-z][A-Za-z0-9]{3,}", symptom)))[:12]
     hits = {}
     if words:
         for r in store.read("CALL db.idx.fulltext.queryNodes('Incident', $q) YIELD node, score RETURN node.id AS id, score",

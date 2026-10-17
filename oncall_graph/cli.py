@@ -151,6 +151,9 @@ def bench(args) -> None:
 
 def call(args) -> None:
     """Call a tool directly, e.g. `oncall-graph call rank_suspects symptom_service=frontend`."""
+    import os
+    os.environ.setdefault("ONCALL_INVESTIGATION_ID", "cli-debug")
+    os.environ.setdefault("ONCALL_AGENT", "cli")
     from . import tools
     kwargs = {}
     for kv in args.kwargs:

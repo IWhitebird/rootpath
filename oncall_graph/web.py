@@ -64,7 +64,8 @@ def investigation(id: str | None = None):
     if id:
         v = store.read("MATCH (v:Investigation {id: $id}) RETURN v", {"id": id})
     else:
-        v = store.read("MATCH (v:Investigation) WHERE v.steps > 0 RETURN v ORDER BY v.started_at DESC LIMIT 1")
+        v = store.read("MATCH (v:Investigation) WHERE v.steps > 0 AND NOT v.id STARTS WITH 'cli-' "
+                       "RETURN v ORDER BY v.started_at DESC LIMIT 1")
     if not v:
         return {"investigation": None, "steps": []}
     inv = {k: val for k, val in v[0]["v"].items() if not k.startswith("_")}
@@ -79,7 +80,7 @@ def investigation(id: str | None = None):
 
 @app.get("/api/investigations")
 def investigations():
-    return store.read("""MATCH (v:Investigation) WHERE v.steps > 0
+    return store.read("""MATCH (v:Investigation) WHERE v.steps > 0 AND NOT v.id STARTS WITH 'cli-'
                          OPTIONAL MATCH (v)-[:FOR]->(i:Incident)
                          RETURN v.id AS id, v.mode AS mode, v.agent AS agent, v.started_at AS started_at,
                                 v.steps AS steps, v.duration_s AS duration_s, v.cost_usd AS cost_usd, i.id AS incident

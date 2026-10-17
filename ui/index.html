@@ -23,7 +23,8 @@
   button.primary { background: #1f3b5c; border-color: #2f5f93; } button.primary:hover { border-color: var(--accent); }
   #busy { color: var(--warn); font-size: 12px; min-width: 120px; text-align: right; }
   main { display: flex; height: calc(100% - 56px); }
-  #graph { flex: 1; position: relative; min-width: 0; }
+  #stage { flex: 1; position: relative; min-width: 0; }
+  #graph { position: absolute; inset: 0; }
   aside { width: 400px; border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; }
   section { padding: 12px 14px; border-bottom: 1px solid var(--line); }
   section h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
@@ -63,8 +64,9 @@
   <div id="busy"></div>
 </header>
 <main>
-  <div id="graph">
-    <div class="hint">nodes the agent looked at are ringed and numbered in step order</div>
+  <div id="stage">
+    <div id="graph"></div>
+    <div class="hint">nodes the agent looked at are ringed and numbered in step order · hover for details</div>
     <div class="legend" id="legend"></div>
     <div id="tip"></div>
   </div>
@@ -119,8 +121,10 @@ const G = ForceGraph()(el)
   })
   .autoPauseRedraw(false)
   .cooldownTicks(120);
+let fitted = false;
+G.onEngineStop(() => { if (!fitted) { G.zoomToFit(400, 70); fitted = true; } });
 el.addEventListener('mousemove', e => { const r = el.getBoundingClientRect(); tip.style.left = (e.clientX - r.left + 14) + 'px'; tip.style.top = (e.clientY - r.top + 14) + 'px'; });
-G.d3Force('charge').strength(-160);
+G.d3Force('charge').strength(-220);
 G.d3Force('link').distance(l => l.type === 'CALLS' ? 70 : 40);
 new ResizeObserver(() => G.width(el.clientWidth).height(el.clientHeight)).observe(el);
 
