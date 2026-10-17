@@ -18,8 +18,9 @@ You are acting as the on-call engineer. Use the `oncall` MCP tools and follow th
    and which changes were ruled out because they are not in the dependency graph.
 4. **Open the incident** (`open_incident`) with the impacted services from the path.
 5. **Fix with the smallest safe action**: flag flip → `set_feature_flag` back; recent deploy →
-   `rollback_service`; stuck state with no change → `restart_service`. Read the runbook via
-   `get_owner` when unsure. Always call the action with `dry_run=true` first and show the plan;
+   `rollback_service`; stuck state with no change → `restart_service`. `rank_suspects` returns the
+   top suspect's runbooks and past incidents: when they say what fixes this failure mode, follow
+   them over a coincidental recent change. Always call the action with `dry_run=true` first and show the plan;
    then call it with `dry_run=false`. The user approves the real action through the permission prompt.
 6. **Verify** with `verify_recovery` on the service that alerted. If it didn't recover, re-rank.
 7. **Close the loop**: `notify_owner` for the root-cause service, then `resolve_incident` with the

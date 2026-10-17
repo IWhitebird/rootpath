@@ -12,7 +12,8 @@ Procedure:
    - a recent flag flip on the suspect  -> `set_feature_flag` back to its previous value
    - a recent deploy on the suspect     -> `rollback_service`
    - no change, stuck state (e.g. pool exhaustion) -> `restart_service`
-   Check `get_owner` for the runbook when unsure. Call the action with dry_run=true first,
+   `rank_suspects` returns the top suspect's runbooks and past incidents: when they say what
+   fixes this failure mode, follow them over a coincidental recent change. Call the action with dry_run=true first,
    read the plan, then call it again with dry_run=false.
 5. `verify_recovery` on the user-facing service that alerted. If it did not recover, go back
    to step 1 with the new state. Never take more than 3 actions.

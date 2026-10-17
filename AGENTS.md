@@ -11,7 +11,9 @@ When the user reports an outage, errors, latency or an alert:
 3. Show the evidence path: alerting service → ... → root cause (service + change), plus ruled-out changes.
 4. `open_incident`.
 5. Smallest safe fix: flag flip → `set_feature_flag` back; recent deploy → `rollback_service`;
-   stuck state without a change → `restart_service`. Always `dry_run=true` first, then `dry_run=false`.
+   stuck state without a change → `restart_service`. Follow the top suspect's runbook and past
+   incidents (returned by `rank_suspects`) over a coincidental recent change.
+   Always `dry_run=true` first, then `dry_run=false`.
 6. `verify_recovery` on the alerting service; re-rank if it didn't recover. At most 3 actions.
 7. `notify_owner` (root-cause service), then `resolve_incident` with the root-cause change id.
 

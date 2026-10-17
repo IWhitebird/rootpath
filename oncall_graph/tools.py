@@ -123,6 +123,9 @@ def get_blast_radius(service: str) -> dict:
            RETURN d.name AS service, hops, d.tier AS tier, d.status AS status, t.name AS team ORDER BY hops, service""",
         {"s": service},
     )
+    live = {n: st["status"] for n, st in infra.all_stats(window=10).items()}
+    for r in upstream + downstream:
+        r["status"] = live.get(r["service"], r["status"])
     teams = sorted({r["team"] for r in upstream} | {r["team"] for r in downstream})
     user_facing = [r["service"] for r in upstream if r["internet_facing"]]
     _trace("get_blast_radius", f"blast radius of {service}: {len(upstream)} upstream, {len(downstream)} downstream",
@@ -138,7 +141,8 @@ def get_blast_radius(service: str) -> dict:
 
 def rank_suspects(symptom_service: str, window_minutes: int = 60) -> dict:
     """Rank root-cause suspects for a symptom by walking the dependency graph downstream from it,
-    combining live health, recent changes (deploys + flag flips), and betweenness centrality."""
+    combining live health, recent changes (deploys + flag flips), and betweenness centrality.
+    Also returns the top suspect's runbooks and the past incidents caused there, with their fixes."""
     snapshot = _fresh()
     since = time.time() - window_minutes * 60
     candidates = store.read(
@@ -233,22 +237,47 @@ def rank_suspects(symptom_service: str, window_minutes: int = 60) -> dict:
 
     touched = [("Service", symptom_service)] + [("Service", s["service"]) for s in suspects[:3]]
     touched += [("Change", ch["id"]) for s in suspects[:2] for ch in s["_changes"]]
-    _trace("rank_suspects", f"top suspect {top['service']} (score {top['score']}) via path {' -> '.join(path)}", touched)
     for s in suspects:
         del s["_changes"]
     detailed = [s for s in suspects if s["score"] >= 0.1][:3] or suspects[:1]
     rest = [{"service": s["service"], "score": s["score"], "status": s["status"], "why_low": s["reasons"][0]}
             for s in suspects if s not in detailed]
+    context = _service_context(top["service"])
+    touched += [("Runbook", r["id"]) for r in context["runbooks"]] + [("Incident", h["incident"]) for h in context["past_incidents_caused_here"]]
+    _trace("rank_suspects", f"top suspect {top['service']} (score {top['score']}) via path {' -> '.join(path)}", touched)
     return {
         "symptom_service": symptom_service,
         "top_suspect": top["service"],
         "path_from_symptom": path,
         "suspects": detailed,
+        "top_suspect_context (runbooks and history from the graph; check before choosing a fix)": context,
         "other_services_on_the_path": rest,
         "ruled_out_changes (not in the dependency graph of the symptom)": [
             f"{_change_line(r['change'])} -> {r['target']}" for r in outside],
         "scoring": "deepest unhealthy +0.4, down +0.3, own errors +0.2, slow +0.15 and fresh change +0.35 (only where the failure starts)",
     }
+
+
+def _service_context(service: str) -> dict:
+    """What the graph already knows about a service: its runbooks and the past incidents whose
+    root cause was the service itself or a change that reached it (deploy or flag), with their fixes."""
+    runbooks = store.read("MATCH (r:Runbook)-[:FOR]->(:Service {name: $s}) RETURN r.id AS id, r.title AS title, r.body AS steps",
+                          {"s": service})
+    past = store.read(
+        """MATCH (s:Service {name: $s})
+           MATCH (i:Incident {status: 'resolved'})-[:ROOT_CAUSE]->(rc)
+           WHERE rc = s OR (rc)-[:CHANGED]->(s) OR (rc)-[:TOGGLED]->(:Flag)-[:AFFECTS]->(s)
+           OPTIONAL MATCH (i)-[:RESOLVED_BY]->(a:Action)
+           RETURN i.id AS incident, i.title AS title, i.mttr_min AS mttr_min, i.opened_at AS opened,
+                  collect(DISTINCT rc) AS causes, collect(DISTINCT {kind: a.kind, target: a.target}) AS fixes
+           ORDER BY opened DESC LIMIT 3""", {"s": service})
+    history = []
+    for r in past:
+        changes = [c for c in r["causes"] if "Change" in c.get("_labels", [])]
+        cause = _change_line(changes[0]).split(": ", 1)[1] if changes else f"{service} itself (no change involved)"
+        history.append({"incident": r["incident"], "title": r["title"], "root_cause": cause,
+                        "fixed_by": [f"{f['kind']} {f['target']}" for f in r["fixes"] if f.get("kind")], "mttr_min": r["mttr_min"]})
+    return {"runbooks": runbooks, "past_incidents_caused_here": history}
 
 
 def _change_line(c: dict) -> str:
@@ -306,7 +335,8 @@ def _path(from_service: str, to_service: str) -> dict:
     if not rows:
         return {"path": [], "note": f"no call path from {from_service} to {to_service}"}
     names, statuses = rows[0]["names"], rows[0]["statuses"]
-    return {"path": names, "hops": [{"service": n, "status": s} for n, s in zip(names, statuses)]}
+    live = {n: st["status"] for n, st in infra.all_stats(window=10).items()}
+    return {"path": names, "hops": [{"service": n, "status": live.get(n, s)} for n, s in zip(names, statuses)]}
 
 
 _TS = re.compile(r"^\d{4}-\d\d-\d\dT[\d:.]+\+00:00 ")

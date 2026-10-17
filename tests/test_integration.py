@@ -42,6 +42,9 @@ def test_rank_suspects_finds_the_origin(fresh, scenario):
     assert out["path_from_symptom"][0] == "frontend" and out["path_from_symptom"][-1] == service
     if kind:
         assert any(f": {kind} " in c for c in top["recent_changes"]), top
+    context = next(v for k, v in out.items() if k.startswith("top_suspect_context"))
+    assert context["runbooks"], "every root-cause service in the demo has a runbook"
+    assert context["past_incidents_caused_here"][0]["fixed_by"], "seeded history says what fixed it last time"
     scores = {s["service"]: s["score"] for s in out["suspects"] + out["other_services_on_the_path"]}
     for h in herrings:
         assert scores.get(h, 0) < top["score"] / 2, (h, scores)
