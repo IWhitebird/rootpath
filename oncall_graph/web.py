@@ -108,18 +108,18 @@ def _background(name: str, fn) -> dict:
 
 @app.post("/api/chaos/{scenario}")
 def chaos(scenario: str):
-    from .cli import SCENARIOS, chaos as inject
+    from .cli import SCENARIOS, inject
     if scenario not in SCENARIOS:
         raise HTTPException(404, "unknown scenario")
-    return _background(f"injecting {scenario}", lambda: (inject(type("A", (), {"scenario": scenario})), ingest.sync_changes()))
+    return _background(f"injecting {scenario}", lambda: (inject(scenario), ingest.sync_changes()))
 
 
 @app.post("/api/reset")
 def reset(hard: bool = False):
-    from .cli import demo_reset, demo_soft_reset
+    from .cli import reset as do_reset
     if hard:
-        return _background("resetting demo (fresh graph)", lambda: demo_reset(None))
-    return _background("restoring healthy state", demo_soft_reset)
+        return _background("resetting demo (fresh graph)", do_reset)
+    return _background("restoring healthy state", lambda: do_reset(soft=True))
 
 
 @app.post("/api/agent")

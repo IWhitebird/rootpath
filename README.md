@@ -90,7 +90,14 @@ done in 45s · 9 tool calls
 
 ## Quickstart (about 3 minutes)
 
-Requirements: Docker, [uv](https://docs.astral.sh/uv/), and Claude Code (for the agent; any MCP host works for the tools).
+Requirements:
+
+- Docker
+- [uv](https://docs.astral.sh/uv/)
+- Claude Code, logged in, for the headless agent. Any MCP host can use the tools.
+
+There's no hosted copy of the stack, because the agent controls real Docker containers. The website
+is the hosted part: it replays recorded real incidents in the browser.
 
 ```bash
 git clone <this repo> oncall-graph && cd oncall-graph

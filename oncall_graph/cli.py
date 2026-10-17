@@ -50,8 +50,12 @@ def demo_soft_reset() -> None:
 
 
 def demo_reset(args) -> None:
-    """Back to a clean, healthy baseline with fresh history."""
-    if args is not None and getattr(args, "soft", False):
+    reset(soft=args.soft)
+
+
+def reset(soft: bool = False) -> None:
+    """Back to a healthy baseline. Hard (default): fresh graph and history. Soft: keep the graph."""
+    if soft:
         return demo_soft_reset()
     from . import infra, ingest, seed, store
     seed.write_baseline()
@@ -89,8 +93,12 @@ def _busy_hour(deploys: list[tuple]) -> None:
 
 
 def chaos(args) -> None:
+    inject(args.scenario)
+
+
+def inject(s: str) -> None:
+    """Inject one of the SCENARIOS into the running demo stack."""
     from . import infra
-    s = args.scenario
     if s == "bad-deploy":
         infra.deploy("catalog", "3.1.0", author="zoya", note="search ranking tweak")
         time.sleep(2)

@@ -4,7 +4,7 @@ import json
 import time
 
 from . import config, store
-from .cli import SCENARIOS, chaos, demo_reset
+from .cli import SCENARIOS, inject, reset
 from .responder import detect, run_agent
 
 EXPECTED = {"bad-deploy": ("rollback", "payment"), "flag": ("toggle_flag", "fraud_model_v2"), "pool": ("restart", "inventory"),
@@ -23,9 +23,9 @@ def _wait(cond, timeout: float, every: float = 3.0) -> bool:
 
 
 def one(scenario: str, mode: str) -> dict:
-    demo_reset(None)
+    reset()
     _wait(lambda: detect() is None, 60)
-    chaos(type("A", (), {"scenario": scenario}))
+    inject(scenario)
     injected = time.time()
     hits = []
     _wait(lambda: hits.append(detect()) or (len(hits) >= 2 and hits[-1] and hits[-2]), 90, every=4)
@@ -60,7 +60,7 @@ def run(scenarios: list[str], modes: list[str], repeats: int = 1) -> None:
                 print(json.dumps(results[-1], indent=1), flush=True)
                 results_file.write_text(json.dumps(results, indent=2))
     write_report(results)
-    demo_reset(None)
+    reset()
 
 
 ACTIONS = {"rollback_service", "restart_service", "set_feature_flag"}

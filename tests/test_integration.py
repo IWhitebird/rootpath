@@ -3,7 +3,7 @@ take the fix through the real action tools, verify recovery and incident memory.
 import pytest
 
 from oncall_graph import config, infra, store, tools
-from oncall_graph.cli import chaos
+from oncall_graph.cli import inject as inject_scenario
 
 from .conftest import wait_for_alert
 
@@ -21,7 +21,7 @@ CASES = {
 
 
 def inject(name):
-    chaos(type("A", (), {"scenario": name}))
+    inject_scenario(name)
     return wait_for_alert()
 
 

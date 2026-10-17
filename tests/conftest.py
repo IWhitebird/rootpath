@@ -23,15 +23,15 @@ def stack():
 @pytest.fixture
 def fresh(stack):
     """Hard reset before the test, so every scenario starts from the same healthy baseline."""
-    from oncall_graph.cli import demo_reset
+    from oncall_graph.cli import reset
     from oncall_graph.responder import detect
-    demo_reset(None)
+    reset()
     for _ in range(20):
         if detect() is None:
             break
         time.sleep(2)
     yield
-    demo_reset(type("A", (), {"soft": True}))
+    reset(soft=True)
 
 
 def wait_for_alert(timeout: float = 60):

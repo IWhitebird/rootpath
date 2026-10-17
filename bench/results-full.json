@@ -318,5 +318,74 @@
     "input_tokens": 101241,
     "output_tokens": 2633,
     "cost_usd": 0.131617
+  },
+  {
+    "scenario": "deploy-noise",
+    "mode": "graph",
+    "investigation": "inv-041611-graph-0df2",
+    "fixed": true,
+    "correct_action": true,
+    "wrong_actions": [],
+    "time_to_resolve_s": 48.8,
+    "agent_s": 44.5,
+    "tool_calls": 9,
+    "tools": [
+      "rank_suspects",
+      "get_logs",
+      "find_similar_incidents",
+      "open_incident",
+      "rollback_service",
+      "rollback_service",
+      "verify_recovery",
+      "notify_owner",
+      "resolve_incident"
+    ],
+    "input_tokens": 77825,
+    "output_tokens": 2530,
+    "cost_usd": 0.1263562
+  },
+  {
+    "scenario": "deploy-noise",
+    "mode": "baseline",
+    "investigation": "inv-041736-baseline-e09d",
+    "fixed": true,
+    "correct_action": true,
+    "wrong_actions": [],
+    "time_to_resolve_s": 39.3,
+    "agent_s": 35.1,
+    "tool_calls": 6,
+    "tools": [
+      "get_service_health",
+      "list_changes_flat",
+      "get_logs",
+      "rollback_service",
+      "rollback_service",
+      "verify_recovery"
+    ],
+    "input_tokens": 46751,
+    "output_tokens": 1689,
+    "cost_usd": 0.08436759999999999
+  },
+  {
+    "scenario": "deploy-noise",
+    "mode": "baseline",
+    "investigation": "inv-041852-baseline-6bf8",
+    "fixed": true,
+    "correct_action": true,
+    "wrong_actions": [],
+    "time_to_resolve_s": 41.5,
+    "agent_s": 37.3,
+    "tool_calls": 6,
+    "tools": [
+      "get_service_health",
+      "list_changes_flat",
+      "get_logs",
+      "rollback_service",
+      "rollback_service",
+      "verify_recovery"
+    ],
+    "input_tokens": 46660,
+    "output_tokens": 1764,
+    "cost_usd": 0.0854048
   }
 ]

@@ -5,13 +5,13 @@ import threading
 import time
 
 from . import infra, store
-from .cli import SCENARIOS, chaos, demo_reset
+from .cli import SCENARIOS, inject, reset
 from .responder import detect, run_agent
 from .web import graph as graph_snapshot
 
 
 def record(scenario: str, out: str, mode: str = "graph") -> None:
-    demo_reset(None)
+    reset()
     for _ in range(20):
         if detect() is None:
             break
@@ -43,7 +43,7 @@ def record(scenario: str, out: str, mode: str = "graph") -> None:
     time.sleep(3)
     snap_health()
     events.append({"t": rel(), "kind": "inject", "text": SCENARIOS[scenario]})
-    chaos(type("A", (), {"scenario": scenario}))
+    inject(scenario)
 
     strikes, alert = 0, None
     while not alert and rel() < 120:
