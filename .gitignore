@@ -9,3 +9,4 @@ bench/runs/
 
 dist/
 build/
+.temp

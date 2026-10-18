@@ -17,6 +17,8 @@ agent follows the graph three hops down. It rules out a deploy that happened at 
 recalls the matching past incident, turns the flag off, verifies recovery, pages the owner and stores
 the incident. [`docs/replay.mp4`](docs/replay.mp4) is the same clip as video.*
 
+![The Rootpath console mid-incident: services in call-depth columns, the agent's numbered path, live health and the investigation steps](docs/screenshot.png)
+
 ## Why a graph
 
 When production breaks, the first half hour goes to working out **what changed, what's affected
