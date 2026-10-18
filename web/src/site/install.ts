@@ -12,19 +12,23 @@ interface Host {
 
 function hosts(repo: string): Host[] {
   const slug = esc(repo.replace(/^https:\/\/github\.com\//, "").replace(/\.git$/, ""));
+  const site = esc(window.location.origin);
   return [
-    { key: "claude", title: "Claude Code", sub: "Plugin: setup dialog, /map, /oncall, /blast-radius, /postmortem, safety hook",
-      code: `<span class="c"># inside Claude Code</span>\n/plugin marketplace add ${slug}\n/plugin install rootpath@rootpath\n<span class="c"># the setup dialog asks for your FalkorDB URL and keeps it in the system keychain</span>\n\n/rootpath:map                                <span class="c"># Claude maps your system into the graph</span>\n/rootpath:oncall checkout is throwing 500s   <span class="c"># and investigates over it</span>`,
-      note: "Bring your own FalkorDB: local Docker (redis://localhost:6380) or FalkorDB Cloud (rediss://user:password@host:port). The URL is entered once in Claude Code's plugin dialog, never in chat. Real actions go through the permission prompt, and the guard hook refuses any action that was not dry-run first." },
+    { key: "cli", title: "Install", sub: "One command, then a short setup that connects your agents",
+      code: `curl -fsSL ${site}/install.sh | sh     <span class="c"># the rootpath binary, into ~/.local/bin</span>\n\nrootpath init     <span class="c"># where your graph lives, a connection test, and your agents</span>\nrootpath start    <span class="c"># optional: background server with the console, ingest and MCP over HTTP</span>`,
+      note: "rootpath init asks where your FalkorDB is (local Docker, FalkorDB Cloud, or a URL), tests the connection, saves it to ~/.config/rootpath/config.toml readable only by you, and installs Rootpath into Claude Code, Codex and Cursor. Nothing goes into chat, and no Rootpath server is involved." },
+    { key: "claude", title: "Claude Code", sub: "Plugin: /map, /oncall, /blast-radius, /postmortem, safety hook",
+      code: `<span class="c"># rootpath init does this for you; by hand:</span>\n/plugin marketplace add ${slug}\n/plugin install rootpath@rootpath\n\n/rootpath:map                                <span class="c"># Claude maps your system into the graph</span>\n/rootpath:oncall checkout is throwing 500s   <span class="c"># and investigates over it</span>`,
+      note: "Read tools are pre-approved. Real actions go through Claude Code's permission prompt, and the guard hook refuses any action that was not dry-run first, or anything during a change freeze." },
     { key: "codex", title: "Codex CLI", sub: "stdio MCP server in config.toml, playbook in AGENTS.md",
-      code: `<span class="c"># ~/.codex/config.toml</span>\n[mcp_servers.oncall]\ncommand = <span class="s">"uv"</span>\nargs = [<span class="s">"run"</span>, <span class="s">"--quiet"</span>, <span class="s">"--directory"</span>, <span class="s">"/abs/path/to/rootpath"</span>, <span class="s">"rootpath"</span>, <span class="s">"mcp"</span>]\n\n[mcp_servers.oncall.env]\nFALKORDB_URL = <span class="s">"redis://localhost:6380"</span>`,
+      code: `<span class="c"># ~/.codex/config.toml (rootpath init writes this)</span>\n[mcp_servers.rootpath]\ncommand = <span class="s">"rootpath"</span>\nargs = [<span class="s">"mcp"</span>]`,
       note: "The same 24 tools. The repository's AGENTS.md carries the incident playbook for Codex and other agents that read it." },
-    { key: "cursor", title: "Cursor, VS Code, any MCP host", sub: "one stdio command",
-      code: `{\n  <span class="s">"mcpServers"</span>: {\n    <span class="s">"oncall"</span>: {\n      <span class="s">"command"</span>: <span class="s">"uv"</span>,\n      <span class="s">"args"</span>: [<span class="s">"run"</span>, <span class="s">"--directory"</span>, <span class="s">"/abs/path/to/rootpath"</span>, <span class="s">"rootpath"</span>, <span class="s">"mcp"</span>]\n    }\n  }\n}`,
+    { key: "cursor", title: "Cursor, VS Code, any MCP host", sub: "stdio, or HTTP when rootpath start is running",
+      code: `<span class="c"># stdio</span>\n{ <span class="s">"mcpServers"</span>: { <span class="s">"rootpath"</span>: { <span class="s">"command"</span>: <span class="s">"rootpath"</span>, <span class="s">"args"</span>: [<span class="s">"mcp"</span>] } } }\n\n<span class="c"># or over HTTP, with the background server running</span>\nclaude mcp add --transport http rootpath http://localhost:7100/mcp`,
       note: "Tools carry MCP annotations: read-only tools are marked readOnlyHint, the three remediation tools destructiveHint, so hosts can ask before acting." },
-    { key: "headless", title: "Headless responder", sub: "an alert starts the agent with no human present",
-      code: `git clone ${esc(repo)} rootpath && cd rootpath\nuv sync\nuv run rootpath demo up      <span class="c"># FalkorDB, 7 services, traffic, history</span>\nuv run rootpath ui           <span class="c"># dashboard on localhost:7100</span>\n\nuv run rootpath chaos flag   <span class="c"># break something</span>\nuv run rootpath watch        <span class="c"># alert -> claude -p with only the oncall tools</span>`,
-      note: "The watcher pages on the most user-facing failing service, launches Claude Code headless with no shell, file or web tools, and stores the run on an Investigation node. --autonomy propose keeps it to dry runs." },
+    { key: "headless", title: "Try the demo", sub: "seven services to break, and an agent that fixes them",
+      code: `rootpath demo up        <span class="c"># FalkorDB, 7 services, traffic and history in Docker</span>\nrootpath ui             <span class="c"># console on localhost:7100</span>\n\nrootpath chaos flag     <span class="c"># break something</span>\nrootpath watch --once   <span class="c"># an alert starts Claude Code headless with only the Rootpath tools</span>`,
+      note: "The watcher pages on the most user-facing failing service and launches Claude Code headless with no shell, file or web tools. --autonomy propose makes the server refuse real actions. From a clone of the repository, prefix the commands with uv run." },
   ];
 }
 

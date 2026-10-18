@@ -7,10 +7,12 @@ requires-python = ">=3.11,<3.14"
 license = "Apache-2.0"
 dependencies = [
     "falkordb>=1.0.10",
-    "mcp>=1.9.0,<2",
+    "mcp>=1.30,<2",
     "httpx>=0.27",
     "fastapi>=0.115",
     "uvicorn>=0.30",
+    "rich>=15.0.0",
+    "questionary>=2.1.1",
 ]
 
 [project.urls]
@@ -24,11 +26,21 @@ rootpath = "rootpath.cli:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# The wheel carries the files Rootpath reads at run time under rootpath/bundle/, where paths.resources()
+# finds them: the prompts, the demo (without what it writes: .gitignore) and the console when it is built.
 [tool.hatch.build.targets.wheel]
-packages = ["rootpath"]
+only-include = ["rootpath", "prompts", "demo", "web/dist/console.html", "web/dist/assets"]
+artifacts = ["web/dist/console.html", "web/dist/assets"]
+dev-mode-dirs = ["."]  # an editable install (uv run) imports from the checkout
+
+[tool.hatch.build.targets.wheel.sources]
+"prompts" = "rootpath/bundle/prompts"
+"demo" = "rootpath/bundle/demo"
+"web/dist" = "rootpath/bundle/web/dist"
 
 [dependency-groups]
 dev = [
+    "pyinstaller>=6.22.3",
     "pytest>=9.1.1",
     "ruff>=0.17.1",
 ]

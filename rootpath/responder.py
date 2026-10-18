@@ -10,15 +10,31 @@ import shutil
 import subprocess
 import time
 import uuid
+from pathlib import Path
 
-from . import config, infra, store
+from . import config, daemon, infra, paths, store
 
-RUNS = config.ROOT / ".oncall" / "runs"
+
+def _runtime() -> Path:
+    """Where headless runs keep their files: .oncall/ in a checkout, the state dir of a bundle."""
+    return paths.state_dir() if paths.bundled() else config.ROOT / ".oncall"
+
+
+RUNS = _runtime() / "runs"
+
+
+def _mcp_server(mode: str) -> list[str]:
+    """The command of the agent's MCP server: uv in a checkout, else this same program (the binary,
+    or the Python of the installed package)."""
+    if paths.bundled():
+        return daemon._command("mcp", "--mode", mode)
+    uv = shutil.which("uv") or "uv"
+    return [uv, "run", "--quiet", "--directory", str(config.ROOT), "rootpath", "mcp", "--mode", mode]
 
 
 def mcp_config(mode: str, investigation_id: str, autonomy: str = "auto") -> str:
-    path = config.ROOT / ".oncall" / f"mcp-{mode}-{investigation_id}.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path = _runtime() / f"mcp-{mode}-{investigation_id}.json"
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)  # the file holds the FalkorDB URL
     env = {
         "ONCALL_MODE": mode,
         "ONCALL_INVESTIGATION_ID": investigation_id,
@@ -30,20 +46,9 @@ def mcp_config(mode: str, investigation_id: str, autonomy: str = "auto") -> str:
         env["ONCALL_NOTIFY_WEBHOOK"] = config.NOTIFY_WEBHOOK
     if autonomy == "propose" or not config.ALLOW_ACTIONS:
         env["ONCALL_ALLOW_ACTIONS"] = "0"  # enforced by the server, not just asked of the model
-    path.write_text(
-        json.dumps(
-            {
-                "mcpServers": {
-                    "oncall": {
-                        "command": shutil.which("uv") or "uv",
-                        "args": ["run", "--quiet", "--directory", str(config.ROOT), "rootpath", "mcp", "--mode", mode],
-                        "env": env,
-                    }
-                }
-            },
-            indent=2,
-        )
-    )
+    command, *args = _mcp_server(mode)
+    with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as f:  # only this user
+        json.dump({"mcpServers": {"oncall": {"command": command, "args": args, "env": env}}}, f, indent=2)
     return str(path)
 
 
@@ -86,7 +91,7 @@ def run_agent(
     )
     if autonomy == "propose":
         prompt += " You are in PROPOSE mode: only call actions with dry_run=true and recommend the fix."
-    system = config.ROOT / "prompts" / ("oncall-agent.md" if mode == "graph" else "oncall-agent-baseline.md")
+    system = paths.resources() / "prompts" / ("oncall-agent.md" if mode == "graph" else "oncall-agent-baseline.md")
     cmd = [
         "claude",
         "-p",

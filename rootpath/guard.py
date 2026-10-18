@@ -8,7 +8,15 @@ import os
 import sys
 import time
 
-from . import config, store
+# A broken config (bad TOML, wrong URL scheme) must block real actions, not crash the hook: Claude Code
+# treats a crashed hook as non-blocking, which would let the action through.
+try:
+    from . import config, store
+except Exception as import_error:  # noqa: BLE001
+    config = store = None
+    _BROKEN = f"{type(import_error).__name__}: {import_error}"
+else:
+    _BROKEN = None
 
 KIND = {
     "rollback_service": ("rollback", "service"),
@@ -38,11 +46,13 @@ def decide(event: dict) -> tuple[str, str] | None:
 
 
 def main() -> None:
-    event = json.load(sys.stdin)
     try:
+        event = json.load(sys.stdin)
+        if _BROKEN:
+            raise RuntimeError(_BROKEN)
         verdict = decide(event)
-    except Exception as e:  # graph unreachable: fail closed for real actions
-        verdict = ("deny", f"rootpath guard could not reach FalkorDB ({type(e).__name__}); blocking real action.")
+    except Exception as e:  # unreadable event, broken config or graph unreachable: fail closed
+        verdict = ("deny", f"rootpath guard could not check this action ({type(e).__name__}); blocking it.")
     if verdict:
         print(
             json.dumps(

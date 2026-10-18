@@ -381,7 +381,7 @@ export class GraphView {
 
     if (service || steps || scale > s.labelAllFrom) {
       const size = (service ? s.font.service : s.font.other) / Math.max(scale, 0.85);
-      ctx.font = `${service ? 600 : 500} ${size}px "IBM Plex Sans", system-ui, sans-serif`;
+      ctx.font = `${service ? 600 : 500} ${size}px "DM Sans", system-ui, sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       ctx.lineWidth = 3 / Math.max(scale, 0.85);

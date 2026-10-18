@@ -1,19 +1,97 @@
-"""Web UI + JSON API: the live graph, the agent's investigation path, and demo controls."""
+"""Web UI + JSON API: the live graph, the agent's investigation path, and demo controls. The same
+app serves the MCP tools over Streamable HTTP at /mcp, and runs the loops `rootpath serve` asks for."""
 
+import ipaddress
+import subprocess
 import threading
 import time
-from pathlib import Path
+from contextlib import asynccontextmanager
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from redis.exceptions import RedisError
+from starlette.datastructures import Headers
 
-from . import config, infra, ingest, store
+from . import config, daemon, infra, ingest, mcp_server, paths, store
 
-app = FastAPI(title="Rootpath")
-DIST = Path(__file__).resolve().parent.parent / "web" / "dist"  # the console, built by `npm run build` in web/
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.mcp = mcp_server.http_app()  # a new one per start: its session manager runs only once
+    async with app.state.mcp.router.lifespan_context(app.state.mcp), daemon.background(**app.state.loops):
+        yield
+
+
+class _MCP:
+    """ASGI app for /mcp: hands each request to the MCP server of the running app."""
+
+    async def __call__(self, scope, receive, send):
+        await scope["app"].state.mcp(scope, receive, send)
+
+
+def _this_machine(host: str | None) -> bool:
+    try:
+        return host == "localhost" or ipaddress.ip_address(host or "").is_loopback
+    except ValueError:
+        return False
+
+
+def _hostname(netloc: str) -> str | None:
+    try:
+        return urlsplit(f"//{netloc}").hostname
+    except ValueError:  # a malformed IPv6 literal
+        return None
+
+
+def _refusal(scope) -> tuple[int, str] | None:
+    """Why to refuse a request that a page of another site can make a browser send, or None. On a
+    loopback socket, a Host that names another site is DNS rebinding (its name, resolving to 127.0.0.1);
+    a POST from a page that is neither this console nor on this machine is cross-site request forgery."""
+    headers = Headers(scope=scope)
+    host, origin = headers.get("host", ""), headers.get("origin")
+    server = scope.get("server") or ("", 0)
+    if _this_machine(server[0]) and not _this_machine(_hostname(host)):
+        return 421, "Invalid Host header"
+    if scope["method"] not in ("GET", "HEAD") and origin is not None:
+        netloc = origin.partition("://")[2]
+        if netloc != host and not _this_machine(_hostname(netloc)):
+            return 403, "Cross-site request refused"
+    return None
+
+
+class _SameMachine:
+    """ASGI middleware: the API changes infrastructure, and `rootpath start` keeps it running in the
+    background, so it refuses what other sites' pages can send it (/mcp checks the same for itself)."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and (refusal := _refusal(scope)):
+            await PlainTextResponse(refusal[1], refusal[0])(scope, receive, send)
+        else:
+            await self.app(scope, receive, send)
+
+
+async def _graph_unavailable(request, exc: RedisError) -> JSONResponse:
+    """FalkorDB is down, or the graph was never written to: a 503, not a traceback in the server's log
+    at every poll of the console."""
+    return JSONResponse({"detail": f"graph unavailable: {type(exc).__name__}: {exc}"}, status_code=503)
+
+
+app = FastAPI(title="Rootpath", lifespan=lifespan, exception_handlers={RedisError: _graph_unavailable})
+app.add_middleware(_SameMachine)
+app.state.loops = {}  # `rootpath serve` turns on the ingest loop and the alert watcher here
+app.add_route("/mcp", _MCP(), include_in_schema=False)
+DIST = paths.resources() / "web" / "dist"  # the console, built by `npm run build` in web/
 NOT_BUILT = """<!doctype html><meta charset="utf-8"><title>Rootpath</title>
 <p>The console is not built yet. Run <code>npm install &amp;&amp; npm run build</code> in <code>web/</code>, then reload.</p>
+"""
+NOT_SHIPPED = """<!doctype html><meta charset="utf-8"><title>Rootpath</title>
+<p>This install of Rootpath has no console: it was installed from source on GitHub, where the console is not
+built. The API and MCP at <code>/mcp</code> work. install.sh installs a release, which has the console.</p>
 """
 _busy = {"task": None, "since": 0.0}
 
@@ -38,7 +116,9 @@ def _nid(node: dict) -> str:
 @app.get("/", response_class=HTMLResponse)
 def index():
     console = DIST / "console.html"
-    return FileResponse(console) if console.exists() else NOT_BUILT
+    if console.exists():
+        return FileResponse(console)
+    return NOT_SHIPPED if paths.bundled() else NOT_BUILT
 
 
 # check_dir=False: a build made while the server runs is picked up without a restart.
@@ -119,7 +199,11 @@ def investigations():
 
 @app.get("/api/health")
 def health():
-    return {"services": infra.all_stats(window=10), "busy": _busy["task"], "allow_actions": config.ALLOW_ACTIONS}
+    try:
+        services = infra.all_stats(window=10)
+    except (OSError, RuntimeError, subprocess.SubprocessError) as e:  # no demo stack here: no compose file or Docker
+        raise HTTPException(503, f"services unavailable: {type(e).__name__}: {e}") from None
+    return {"services": services, "busy": _busy["task"], "allow_actions": config.ALLOW_ACTIONS}
 
 
 def _background(name: str, fn) -> dict:

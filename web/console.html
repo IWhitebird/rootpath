@@ -6,7 +6,7 @@
 <title>Rootpath · Console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400&display=swap">
 </head>
 <body>
 <div class="app">
@@ -17,16 +17,16 @@
     </div>
     <span class="env" id="env">demo · FalkorDB</span>
     <div class="spacer"></div>
-    <div class="menu-wrap">
+    <div class="menu-wrap demo-only">
       <button class="btn danger" id="break-btn" aria-haspopup="true" aria-expanded="false">Break something ▾</button>
       <div class="menu" id="break-menu" hidden></div>
     </div>
-    <div class="seg" role="group" aria-label="Agent tools">
+    <div class="seg demo-only" role="group" aria-label="Agent tools">
       <button id="mode-graph" aria-pressed="true" title="Agent gets the FalkorDB graph tools">graph</button>
       <button id="mode-baseline" aria-pressed="false" title="Agent gets only health, logs and a flat change list">baseline</button>
     </div>
-    <button class="btn primary" id="run">Run agent</button>
-    <button class="btn" id="reset" title="Restore healthy state and keep incident memory. Shift-click for a fresh graph.">Reset</button>
+    <button class="btn primary demo-only" id="run">Run agent</button>
+    <button class="btn demo-only" id="reset" title="Restore healthy state and keep incident memory. Shift-click for a fresh graph.">Reset</button>
   </header>
   <div class="strip">
     <span class="status" id="status"><span class="dot"></span><span id="status-text">All services healthy</span></span>
@@ -40,13 +40,17 @@
     <div class="stage">
       <div class="graph-area">
         <div id="graph"></div>
-        <div class="caption" id="caption"><span class="chip">idle</span><span class="text">Break something, then run the agent.</span></div>
+        <div class="caption" id="caption"><span class="chip">idle</span><span class="text">Waiting for the agent.</span></div>
         <div class="detail" id="detail" hidden></div>
+        <div class="empty-graph" id="empty-graph" hidden>
+          <b>Your graph is empty</b>
+          <p>In Claude Code, open your repository and run <code>/rootpath:map</code>: Claude reads your services, dependencies, owners and runbooks and writes them here. Or load the demo system with <code>rootpath demo up</code>.</p>
+        </div>
       </div>
       <div class="legend" id="legend"></div>
     </div>
     <aside>
-      <div class="health"><h4>Live health · last 10s</h4><div id="health"></div></div>
+      <div class="health"><h4 id="health-title">Live health · last 10s</h4><div id="health"></div></div>
       <div class="tabs" role="tablist">
         <button role="tab" aria-selected="true" data-tab="inv">Investigation</button>
         <button role="tab" aria-selected="false" data-tab="inc">Incident memory <span class="count" id="inc-count">0</span></button>

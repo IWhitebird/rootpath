@@ -12,17 +12,51 @@ import { createGraph, showDetail } from "./view";
 
 let health: Record<string, ServiceStats> = {};
 let selectedStep: number | null = null;
+/** Services in the graph with the health last synced onto them (the fallback when the demo isn't running). */
+let graphServices: { name: string; status?: string }[] = [];
+let demoRunning = true;
+let hasInvestigation = false;
 const graph = createGraph();
 graph.status = (name) => health[name]?.status;
 
 async function loadGraph(): Promise<void> {
-  const data = await getJson<GraphData>("/api/graph");
+  let data: GraphData;
+  try {
+    data = await getJson<GraphData>("/api/graph");
+  } catch (err) {
+    // A graph that has never been written to does not exist yet, so the API errors instead of returning nothing.
+    graphServices = [];
+    byId("empty-graph").hidden = false;
+    throw err;
+  }
+  graphServices = data.nodes
+    .filter((n) => n.type === "Service")
+    .map((n) => ({ name: n.name, status: typeof n.props.status === "string" ? n.props.status : undefined }));
+  byId("empty-graph").hidden = graphServices.length > 0;
   graph.layout(data.nodes, data.links);
   graph.show(data.nodes, data.links);
 }
 
 async function loadHealth(): Promise<void> {
-  const data = await getJson<HealthResponse>("/api/health");
+  let data: HealthResponse;
+  try {
+    data = await getJson<HealthResponse>("/api/health");
+  } catch {
+    data = { services: {}, busy: null, allow_actions: false }; // no demo stack to read health from
+  }
+  // The demo stack is running when at least one of its services answers its stats endpoint.
+  demoRunning = Object.values(data.services).some((s) => s.status !== "down" && s.status !== "unknown");
+  document.body.classList.toggle("no-demo", !demoRunning);
+  byId("env").textContent = demoRunning ? "demo · FalkorDB" : "your graph · FalkorDB";
+  byId("health-title").textContent = demoRunning ? "Live health · last 10s" : "Services · last synced health";
+  if (!demoRunning) {
+    showGraphServices();
+    if (!hasInvestigation) {
+      byId("caption").innerHTML =
+        '<span class="chip">ready</span><span class="text">Ask your agent, for example <code>/rootpath:oncall checkout is failing</code>. Every step it takes appears here, on the nodes it looked at.</span>';
+    }
+    return;
+  }
   health = data.services;
   byId("busy").textContent = data.busy ? `● ${data.busy}` : "";
   for (const id of ["run", "reset", "break-btn"]) byId<HTMLButtonElement>(id).disabled = !!data.busy;
@@ -48,11 +82,25 @@ async function loadHealth(): Promise<void> {
   byId("status-text").textContent = bad.length ? `${bad.length} service${bad.length > 1 ? "s" : ""} failing: ${bad.join(", ")}` : "All services healthy";
 }
 
+/** Without the demo, list the services in the graph with whatever health was last synced onto them. */
+function showGraphServices(): void {
+  health = Object.fromEntries(graphServices.filter((s) => s.status).map((s) => [s.name, { status: s.status } as ServiceStats]));
+  byId("health").innerHTML = graphServices.length
+    ? sortByHealth(graphServices.map((s) => [s.name, s] as [string, { status?: string }]), (s) => s.status ?? "unknown")
+        .map(([name, s]) => `<div class="svc"><span class="dot" style="background:var(--${statusTone(s.status ?? "unknown")})"></span><span>${esc(name)}</span>
+          <span class="n">${esc(s.status ?? "no data")}</span><span class="n"></span></div>`)
+        .join("")
+    : '<p class="empty">No services yet.</p>';
+  byId("status").classList.remove("bad");
+  byId("status-text").textContent = graphServices.length ? `${graphServices.length} services in your graph` : "Graph is empty";
+}
+
 const stepCaption = (s: Step) => `<span class="chip step">step ${s.n}</span><span class="text"><code>${esc(s.tool)}</code> ${esc(s.note || "")}</span>`;
 
 async function loadInvestigation(): Promise<void> {
   const { investigation: inv, steps } = await getJson<InvestigationResponse>("/api/investigation");
   if (!inv) return;
+  hasInvestigation = true;
   const last = steps.at(-1);
   const selected = steps.find((s) => s.n === selectedStep);
   graph.setTrail(steps, (selectedStep === null ? last : selected)?.targets ?? []);

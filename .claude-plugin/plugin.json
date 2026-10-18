@@ -19,19 +19,18 @@
   ],
   "mcpServers": {
     "oncall": {
-      "command": "uv",
+      "command": "sh",
       "args": [
-        "run",
-        "--quiet",
-        "--directory",
-        "${CLAUDE_PLUGIN_ROOT}",
+        "-c",
+        "command -v rootpath >/dev/null 2>&1 && exec rootpath \"$@\" || exec uv run --quiet --directory \"$ROOTPATH_PLUGIN_ROOT\" rootpath \"$@\"",
         "rootpath",
         "mcp"
       ],
       "env": {
         "ONCALL_AGENT": "claude-code",
         "FALKORDB_URL": "${user_config.falkordb_url}",
-        "ONCALL_GRAPH": "${user_config.graph}"
+        "ONCALL_GRAPH": "${user_config.graph}",
+        "ROOTPATH_PLUGIN_ROOT": "${CLAUDE_PLUGIN_ROOT}"
       }
     }
   },
@@ -39,15 +38,15 @@
     "falkordb_url": {
       "type": "string",
       "title": "FalkorDB URL",
-      "description": "Where your Rootpath graph lives. Local Docker: redis://localhost:6380. FalkorDB Cloud: rediss://<user>:<password>@<host>:<port>.",
-      "default": "redis://localhost:6380",
+      "description": "Optional override. Leave empty to use the settings from rootpath init. Otherwise: redis://localhost:6380 for local Docker, rediss://<user>:<password>@<host>:<port> for FalkorDB Cloud.",
+      "default": "",
       "sensitive": true
     },
     "graph": {
       "type": "string",
       "title": "Graph name",
-      "description": "Name of the FalkorDB graph that holds your system.",
-      "default": "oncall"
+      "description": "Optional override of the graph that holds your system. Leave empty to use the settings from rootpath init.",
+      "default": ""
     }
   }
 }

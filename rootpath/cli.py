@@ -150,7 +150,7 @@ def inject(s: str) -> None:
     print(f"injected: {SCENARIOS[s]}")
 
 
-def status(args) -> None:
+def health(args) -> None:
     from . import infra
 
     for name, s in infra.all_stats().items():
@@ -158,6 +158,19 @@ def status(args) -> None:
             f"{name:<12} {s['status']:<9} v{s.get('version', '?'):<7} err {s.get('error_rate', 0):>5.0%}  "
             f"p95 {s.get('p95_ms', 0):>6.0f}ms  req {s.get('requests', 0)}"
         )
+
+
+def status(args) -> None:
+    """The background server, its loops and FalkorDB, then the live health table."""
+    from . import daemon
+
+    for label, value in daemon.status():
+        print(f"{label:<9} {value}")
+    print()
+    try:
+        health(args)
+    except Exception as e:  # the table reads the services of the demo compose file, through Docker
+        print(f"services unavailable ({type(e).__name__}: {e})")
 
 
 FULL_SYNC_EVERY = 60.0  # seconds between full syncs in `ingest --watch`
@@ -181,23 +194,36 @@ def _sync_cycle(full: bool) -> str:
     )
 
 
+def ingest_loop(interval: float, wait=None, report=None, cycle=None) -> None:
+    """Keep the graph current: a full sync, then a live one every `interval` seconds and a full one
+    every FULL_SYNC_EVERY. `wait(seconds)` pauses between cycles (default time.sleep) and ends the loop
+    by returning True, as a set threading.Event's wait does; `report(line, ok)` gets each cycle's
+    summary (default: print it); `cycle(full)` runs one (default _sync_cycle)."""
+    wait = wait or time.sleep
+    report = report or (lambda line, ok: print(line, flush=True))
+    cycle = cycle or _sync_cycle
+    last_full = None
+    while True:
+        started = time.monotonic()
+        full = last_full is None or started - last_full >= FULL_SYNC_EVERY
+        try:
+            line, ok = cycle(full), True
+            if full:
+                last_full = started
+        except Exception as e:  # keep running through a dropped connection or a restarting service
+            line, ok = f"{time.strftime('%H:%M:%S')} sync failed: {type(e).__name__}: {e}", False
+        report(line, ok)
+        if wait(max(0.0, interval - (time.monotonic() - started))):
+            return
+
+
 def ingest(args) -> None:
     """One full sync, or with --watch keep the graph current until Ctrl-C."""
     if not args.watch:
         print(_sync_cycle(full=True))
         return
-    last_full = None
     try:
-        while True:
-            started = time.monotonic()
-            full = last_full is None or started - last_full >= FULL_SYNC_EVERY
-            try:
-                print(_sync_cycle(full), flush=True)
-                if full:
-                    last_full = started
-            except Exception as e:  # keep running through a dropped connection or a restarting service
-                print(f"{time.strftime('%H:%M:%S')} sync failed: {type(e).__name__}: {e}", flush=True)
-            time.sleep(max(0.0, args.interval - (time.monotonic() - started)))
+        ingest_loop(args.interval)
     except KeyboardInterrupt:
         print("ingest stopped")
 
@@ -212,6 +238,39 @@ def ui(args) -> None:
     import uvicorn
 
     uvicorn.run("rootpath.web:app", host=args.host, port=args.port, log_level="warning")
+
+
+def serve(args) -> None:
+    from . import daemon
+
+    try:
+        daemon.serve(args.port, ingest=not args.no_ingest, watch_alerts=args.watch_alerts)
+    except daemon.DaemonError as e:
+        sys.exit(f"rootpath: {e}")
+
+
+def start(args) -> None:
+    from . import daemon
+
+    try:
+        info = daemon.start(args.port, ingest=not args.no_ingest, watch_alerts=args.watch_alerts)
+    except daemon.DaemonError as e:
+        sys.exit(f"rootpath: {e}")
+    url = f"http://localhost:{info['port']}"
+    print(f"rootpath is running in the background (pid {info['pid']})")
+    print(f"  console  {url}\n  mcp      {url}/mcp\n  log      {daemon.log_path()}")
+    print(f"\nOptional: connect Claude Code to it over HTTP:\n  claude mcp add --transport http rootpath {url}/mcp")
+    print("\n`rootpath status` reports on it, `rootpath stop` stops it.")
+
+
+def stop(args) -> None:
+    from . import daemon
+
+    try:
+        info = daemon.stop()
+    except daemon.DaemonError as e:
+        sys.exit(f"rootpath: {e}")
+    print(f"rootpath stopped (pid {info['pid']})" if info else "rootpath is not running")
 
 
 def watch(args) -> None:
@@ -264,9 +323,85 @@ def _seconds(value: str) -> float:
     return seconds
 
 
+def _port(value: str) -> int:
+    port = int(value)
+    if not 1 <= port <= 65535:
+        raise argparse.ArgumentTypeError("must be from 1 to 65535")
+    return port
+
+
+def init(args) -> None:
+    from .onboard import run
+
+    sys.exit(run(args))
+
+
+def config_show(args) -> None:
+    from .onboard import show_config
+
+    sys.exit(show_config())
+
+
+def config_set(args) -> None:
+    from .onboard import set_config
+
+    sys.exit(set_config(args.key, args.value))
+
+
+def _agent_list(value: str) -> list[str]:
+    from .onboard import AGENTS
+
+    names = [] if value.strip() == "none" else list(dict.fromkeys(a.strip() for a in value.split(",") if a.strip()))
+    if unknown := sorted(set(names) - set(AGENTS)):
+        raise argparse.ArgumentTypeError(f"unknown agent {', '.join(unknown)} (claude, codex, cursor or none)")
+    return names
+
+
+class _Version(argparse.Action):
+    """--version: the installed package's version (the binary carries its metadata), read only when
+    asked for, as reading it adds tens of milliseconds to every command."""
+
+    def __init__(self, option_strings, dest, **kwargs):
+        super().__init__(option_strings, dest, nargs=0, default=argparse.SUPPRESS, help="show the version and exit")
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        from importlib.metadata import PackageNotFoundError, version
+
+        try:
+            print(f"rootpath {version('rootpath')}")
+        except PackageNotFoundError:  # run from source without being installed
+            print("rootpath (version unknown: not installed)")
+        parser.exit()
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="rootpath")
+    p.add_argument("--version", action=_Version)
     sub = p.add_subparsers(dest="cmd", required=True)
+    i = sub.add_parser("init", help="set up Rootpath: where the graph lives and which agents use it")
+    i.add_argument("--falkordb-url", help="use this FalkorDB (redis://, or rediss:// for TLS) instead of asking")
+    i.add_argument("--graph", help="graph name (default: oncall, or the one already set)")
+    i.add_argument("--agents", type=_agent_list, help="claude,codex,cursor or none (default: those on PATH)")
+    i.add_argument("--demo", action=argparse.BooleanOptionalAction, help="start the demo system (--yes: off)")
+    i.add_argument(
+        "--plugin-source",
+        choices=["github", "local"],
+        help="install the Claude Code plugin from GitHub (default) or from this checkout",
+    )
+    i.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="ask nothing (defaults: the FalkorDB already set, else Local Docker; agents on PATH)",
+    )
+    i.set_defaults(fn=init)
+    cfg = sub.add_parser("config", help="show or change the saved settings")
+    cfg_cmd = cfg.add_subparsers(dest="config_cmd", required=True)
+    cfg_cmd.add_parser("show", help="the settings in effect and where each comes from").set_defaults(fn=config_show)
+    cfg_set = cfg_cmd.add_parser("set", help="save a setting to the config file (empty value: unset)")
+    cfg_set.add_argument("key", choices=list(config.DEFAULTS))
+    cfg_set.add_argument("value")
+    cfg_set.set_defaults(fn=config_set)
     d = sub.add_parser("demo", help="manage the demo stack").add_subparsers(dest="demo_cmd", required=True)
     d.add_parser("up").set_defaults(fn=demo_up)
     down = d.add_parser("down")
@@ -278,7 +413,10 @@ def main() -> None:
     c = sub.add_parser("chaos", help="inject a failure scenario")
     c.add_argument("scenario", choices=list(SCENARIOS))
     c.set_defaults(fn=chaos)
-    sub.add_parser("status", help="live health table").set_defaults(fn=status)
+    sub.add_parser("status", help="background server, FalkorDB and ingest, then the health table").set_defaults(
+        fn=status
+    )
+    sub.add_parser("health", help="live health table").set_defaults(fn=health)
     ing = sub.add_parser("ingest", help="sync the graph from sources (once, or continuously with --watch)")
     ing.add_argument(
         "--watch",
@@ -288,6 +426,8 @@ def main() -> None:
     ing.add_argument("--interval", type=_seconds, default=5.0, help="seconds between --watch cycles (default 5)")
     ing.set_defaults(fn=ingest)
     sub.add_parser("sync", help="one full sync (same as `ingest`)").set_defaults(fn=ingest, watch=False)
+    g = sub.add_parser("guard", help="safety check for the Claude Code PreToolUse hook (reads the hook event on stdin)")
+    g.set_defaults(fn=lambda _args: __import__("rootpath.guard", fromlist=["main"]).main())
     m = sub.add_parser("mcp", help="run the MCP server on stdio")
     m.add_argument("--mode", choices=["graph", "baseline"], default=None)
     m.set_defaults(fn=mcp)
@@ -295,6 +435,19 @@ def main() -> None:
     u.add_argument("--host", default="127.0.0.1")
     u.add_argument("--port", type=int, default=7100)
     u.set_defaults(fn=ui)
+    server = argparse.ArgumentParser(add_help=False)
+    server.add_argument("--port", type=_port, default=7100, help="console, API and MCP port (default 7100)")
+    server.add_argument("--no-ingest", action="store_true", help="don't keep the graph in sync with its sources")
+    server.add_argument(
+        "--watch-alerts",
+        action="store_true",
+        help="also run `rootpath watch` while the demo stack runs: a headless agent fixes each alert",
+    )
+    sub.add_parser(
+        "serve", parents=[server], help="console + API, MCP over HTTP at /mcp and the ingest loop, in the foreground"
+    ).set_defaults(fn=serve)
+    sub.add_parser("start", parents=[server], help="run `serve` in the background").set_defaults(fn=start)
+    sub.add_parser("stop", help="stop the background server").set_defaults(fn=stop)
     w = sub.add_parser("watch", help="alert watcher that launches a headless agent")
     w.add_argument("--mode", choices=["graph", "baseline"], default="graph")
     w.add_argument("--autonomy", choices=["auto", "propose"], default="auto")

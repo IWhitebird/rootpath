@@ -1,0 +1,72 @@
+# On a pushed tag v*: build the rootpath binary on each platform (scripts/build_binary.py) and attach it,
+# with its SHA-256, to the GitHub release of that tag, along with the source with its console built.
+# web/public/install.sh downloads them from there: the source is what it installs with uv where no binary runs.
+name: release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  binary:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-latest, platform: linux-x86_64 }
+          - { runner: macos-15, platform: macos-arm64 }
+          # The x86_64 macOS runner: macos-13 is retired and macos-14 deprecated.
+          - { runner: macos-15-intel, platform: macos-x86_64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: The tag names the package's version
+        run: test "v$(uv version --short)" = "$GITHUB_REF_NAME"
+      - run: uv sync --locked
+      - run: uv run python scripts/build_binary.py --release
+      - name: The binary is named for this platform and starts
+        run: dist/rootpath-${{ matrix.platform }} --version
+      # `uv tool install git+https://...` would have no console: web/dist is built, not committed.
+      - name: The source of the tag with its console
+        if: matrix.platform == 'linux-x86_64'
+        run: |
+          git archive --prefix=rootpath/ --output=dist/rootpath-source.tar HEAD
+          tar --append --file=dist/rootpath-source.tar --transform='s,^,rootpath/,' web/dist/console.html web/dist/assets
+          gzip -9n dist/rootpath-source.tar
+          cd dist && sha256sum rootpath-source.tar.gz > rootpath-source.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rootpath-${{ matrix.platform }}
+          path: |
+            dist/rootpath-${{ matrix.platform }}
+            dist/rootpath-${{ matrix.platform }}.sha256
+            dist/rootpath-source.tar.gz*
+          if-no-files-found: error
+
+  release:
+    needs: binary
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Attach the binaries to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" assets/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" assets/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
+          fi

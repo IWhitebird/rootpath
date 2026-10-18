@@ -4,8 +4,8 @@
   --bg: #0b1117; --surface: #111a22; --surface-2: #17222c; --ink: #e2eaf0; --muted: #8c9dab; --line: #24323e;
   --accent: #5db9e8; --path: #ffc94a; --path-ink: #241a00; --ok: #44c47b; --warn: #f0a92a; --bad: #ff6a5a; --idle: #6b7b88;
   --team: #a283ec; --person: #e57ab3;
-  --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
-  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --display: "Source Serif 4", "Iowan Old Style", Georgia, serif;
+  --body: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   color-scheme: dark;
 }
@@ -29,7 +29,7 @@ code, .mono { font-family: var(--mono); }
 .app { display: grid; grid-template-rows: auto auto minmax(0, 1fr); height: 100%; }
 
 header { display: flex; align-items: center; gap: 14px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
-.brand { display: flex; align-items: center; gap: 9px; font: 800 1.05rem/1 var(--display); letter-spacing: -0.01em; }
+.brand { display: flex; align-items: center; gap: 9px; font: 600 1.02rem/1 var(--body); letter-spacing: -0.02em; }
 .env { font: 500 0.72rem/1 var(--mono); color: var(--muted); border: 1px solid var(--line); padding: 4px 7px; border-radius: 5px; }
 .spacer { flex: 1; }
 .btn { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 7px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; font-weight: 500; font-size: 13px; }
@@ -73,7 +73,7 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 0
 .legend input { position: absolute; opacity: 0; pointer-events: none; }
 .legend i { width: 9px; height: 9px; display: inline-block; border-radius: 50%; }
 .detail { position: absolute; right: 14px; bottom: 12px; z-index: 5; width: 300px; max-height: 55%; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; box-shadow: 0 18px 40px -18px rgba(0,0,0,.55); }
-.detail h3 { margin: 0 0 2px; font: 700 1rem/1.3 var(--display); }
+.detail h3 { margin: 0 0 2px; font: 600 1rem/1.3 var(--body); }
 .detail .type { font: 600 0.68rem/1 var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
 .detail dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 10px; margin: 10px 0 0; font-size: 12px; }
 .detail dt { color: var(--muted); font-family: var(--mono); }
@@ -127,3 +127,11 @@ aside h4 { margin: 0 0 8px; font: 600 0.68rem/1 var(--mono); letter-spacing: .09
   .app { height: auto; } main { grid-template-columns: minmax(0, 1fr); } .stage { height: 60vh; }
   aside { border-left: 0; border-top: 1px solid var(--line); }
 }
+
+/* Without the demo stack the console shows the user's own graph: no demo controls. */
+.no-demo .demo-only { display: none !important; }
+.empty-graph { position: absolute; inset: 0; display: grid; place-content: center; z-index: 3; padding: 24px; }
+.empty-graph[hidden] { display: none; }
+.empty-graph b { font: 500 1.6rem/1.2 var(--display); letter-spacing: -0.02em; text-align: center; }
+.empty-graph p { max-width: 52ch; margin: 10px auto 0; color: var(--muted); text-align: center; }
+.empty-graph code { font-size: 0.9em; background: var(--surface-2); padding: 1px 6px; border-radius: 4px; }

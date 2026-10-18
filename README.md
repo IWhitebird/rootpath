@@ -148,27 +148,42 @@ cap. Only these validated tools and deterministic code write.
 
 ## Quickstart
 
-Requirements: Docker, [uv](https://docs.astral.sh/uv/), and Claude Code (logged in) for the agent.
-Any MCP host can use the tools.
-
 ```bash
-git clone https://github.com/IWhitebird/rootpath.git && cd rootpath
-uv sync
-uv run rootpath demo up        # FalkorDB :6380, 7 services, a load generator, seeded history
-uv run rootpath ui             # operator console: http://localhost:7100
+curl -fsSL https://raw.githubusercontent.com/IWhitebird/rootpath/main/web/public/install.sh | sh
+rootpath init                              # where your graph lives, a connection test, your agents
 ```
 
-Break something and let the agent fix it:
+`rootpath init` asks where your FalkorDB is (local Docker, which it can start for you; FalkorDB Cloud;
+or any URL), tests the connection, and saves it to `~/.config/rootpath/config.toml`, readable only by
+you. It then installs Rootpath into Claude Code (the plugin), Codex and Cursor, and offers the demo
+system. Nothing goes into chat, and there is no Rootpath server to sign up for.
+
+Then either map your own system, or try the demo:
 
 ```bash
-uv run rootpath chaos flag     # or bad-deploy, pool, deploy-noise, flag-collision, pool-after-deploy
-uv run rootpath watch --once   # the alert fires and a headless agent investigates, fixes and verifies
+# your system: in Claude Code, inside your repository
+/rootpath:map
+/rootpath:oncall checkout is throwing 500s
+
+# the demo: 7 services in Docker that you can break on purpose
+rootpath demo up
+rootpath chaos flag            # or bad-deploy, pool, deploy-noise, flag-collision, pool-after-deploy
+rootpath watch --once          # the alert fires and a headless agent investigates, fixes and verifies
 ```
 
-The console does the same with buttons: **Break something**, a **graph / baseline** toolset switch,
-**Run agent**, and **Reset** (keeps incident memory; shift-click for a fresh graph). It shows the
-graph with the agent's numbered path, live health, the steps and report, incident memory and recent
-changes.
+**Background server:** `rootpath start` runs the console, the ingest loop and MCP over HTTP on
+localhost in the background, like a local daemon. `rootpath status` shows it, the graph and service
+health; `rootpath stop` ends it. Logs go to `~/.local/state/rootpath/`.
+
+**Console** (`http://localhost:7100`, from `rootpath start` or `rootpath ui`): the graph with services in
+call-depth columns, live health, the agent's numbered path as it reasons, its report, incident memory
+and recent changes. With the demo running it adds **Break something**, a **graph / baseline** toolset
+switch, **Run agent** and **Reset**. On your own system it shows your graph, and an empty graph tells you
+to run `/rootpath:map`.
+
+**From a clone** (development): `uv sync`, then prefix the commands with `uv run`
+(`uv run rootpath demo up`, `uv run rootpath ui`). The demo needs Docker, and the headless agent needs
+Claude Code, logged in.
 
 | Scenario | What breaks | Correct fix | Trap |
 |---|---|---|---|
@@ -179,13 +194,10 @@ changes.
 | `flag-collision` | the flag ramp, three minutes after a healthy fraud-check release | flag off | a release on the slow service |
 | `pool-after-deploy` | pool exhaustion right after a healthy inventory release | restart inventory | a release on the failing service |
 
-**With FalkorDB Cloud:** point everything at your instance and the console, agent and ingestor share
-one graph:
-
-```bash
-export FALKORDB_URL="rediss://<user>:<password>@<host>:<port>"   # rediss = TLS
-uv run rootpath demo up && uv run rootpath ingest --watch
-```
+**Settings:** the config file from `rootpath init` is the single source (`rootpath config show`,
+`rootpath config set falkordb_url …`). Environment variables override it (`FALKORDB_URL`,
+`ONCALL_GRAPH`). FalkorDB Cloud URLs look like `falkor://<user>:<password>@<host>:<port>`
+(`redis://` and `rediss://` for TLS work too).
 
 ## Use it from your agent
 
@@ -199,24 +211,22 @@ uv run rootpath demo up && uv run rootpath ingest --watch
 /rootpath:oncall checkout is throwing 500s     # investigate over it
 ```
 
-When the plugin is enabled, Claude Code's setup dialog asks for the **FalkorDB URL** (`redis://localhost:6380`
-for local Docker, `rediss://user:password@host:port` for FalkorDB Cloud) and the graph name. The URL is
-marked sensitive, so it goes to the system keychain, and it reaches the MCP server and the safety
-hook as an environment variable. It is never typed into chat. Read tools are pre-approved. Real
-actions go through Claude Code's permission prompt, and the hook denies any real action that was not
-dry-run first, or anything during a change freeze.
+`rootpath init` installs the plugin and the plugin reads the settings `init` saved. The plugin's own setup
+dialog (FalkorDB URL, graph name) is only an override and can stay empty; its values are kept in the
+system keychain, never in chat. Read tools are pre-approved. Real actions go through Claude Code's
+permission prompt. The hook denies any real action that was not dry-run first, anything during a change
+freeze, and fails closed if it cannot check.
 
-**Codex CLI** (`~/.codex/config.toml`); the incident playbook is in [`AGENTS.md`](AGENTS.md):
+**Codex CLI** (`~/.codex/config.toml`, written by `rootpath init`); the incident playbook is in [`AGENTS.md`](AGENTS.md):
 
 ```toml
-[mcp_servers.oncall]
-command = "uv"
-args = ["run", "--quiet", "--directory", "/abs/path/to/rootpath", "rootpath", "mcp"]
-[mcp_servers.oncall.env]
-FALKORDB_URL = "redis://localhost:6380"
+[mcp_servers.rootpath]
+command = "rootpath"
+args = ["mcp"]
 ```
 
-**Cursor, VS Code or any MCP host:** `uv run --directory /abs/path/to/rootpath rootpath mcp` (stdio).
+**Cursor, VS Code or any MCP host:** `rootpath mcp` over stdio, or, with `rootpath start` running,
+`http://localhost:7100/mcp` over HTTP (`claude mcp add --transport http rootpath http://localhost:7100/mcp`).
 
 **Headless:** `uv run rootpath watch` polls health. When a user-facing service fails twice in a row,
 it launches `claude -p` with only the Rootpath tools (no shell, file or web tools) and stores the run
@@ -376,7 +386,12 @@ uv run pytest tests/test_unit.py          # unit tests, no Docker needed (run in
 uv run pytest tests/test_integration.py   # end-to-end tests against the live demo stack (~6 min)
 uv run ruff check . && uv run ruff format --check .
 cd web && npm ci && npm run build         # typecheck + build the site, console and API (run in CI)
+uv run python scripts/build_binary.py     # the single rootpath binary for this OS, in dist/
 ```
+
+Releases: pushing a `v*` tag builds the binaries for Linux x86_64, macOS arm64 and macOS x86_64 in CI
+and attaches them to the GitHub release, which `install.sh` downloads (it falls back to
+`uv tool install` where no binary fits).
 
 The integration suite injects every scenario and checks that `rank_suspects` finds where the failure
 starts, with red herrings scored low. It also takes the full fix loop through the real action tools and
@@ -395,15 +410,21 @@ skills/ hooks/ .claude-plugin/   Claude Code plugin: skills (map, oncall, blast-
                 safety hook, manifest with the FalkorDB setup dialog
 prompts/        headless agent playbooks
 bench/          benchmark results
-tests/          unit and integration tests
+tests/          unit, onboarding, background-server, path and integration tests
+scripts/        build_binary.py (PyInstaller) · replay capture for the docs media
 ```
 
 | Command | What it does |
 |---|---|
+| `rootpath init` | onboarding: graph location, connection test, connect Claude Code / Codex / Cursor |
+| `rootpath config show / set KEY VALUE` | the saved settings (password masked) |
+| `rootpath start / stop / status` | background server: console, ingest loop, MCP over HTTP |
+| `rootpath serve` | the same server in the foreground |
+| `rootpath health` | service health table |
 | `rootpath demo up / down / reset [--soft]` | run, stop or reset the demo stack |
 | `rootpath chaos <scenario>` | inject a failure |
 | `rootpath ingest [--watch] [--interval S]` | sync the graph from its sources, once or continuously |
-| `rootpath ui` | operator console on :7100 |
+| `rootpath ui` | operator console on :7100, in the foreground |
 | `rootpath mcp [--mode graph\|baseline]` | MCP server on stdio |
 | `rootpath watch [--once] [--autonomy propose]` | alert watcher that launches the headless agent |
 | `rootpath bench [--scenario ...] [--repeats N]` | graph vs baseline benchmark |

@@ -7,8 +7,10 @@ const CONNECT_TIMEOUT_MS = 3000;
 const QUERY_TIMEOUT_MS = 5000;
 const DEADLINE_MS = 8000;
 const DEFAULT_PORT = 6379;
-const TLS_BY_PROTOCOL: Record<string, boolean> = { "redis:": false, "rediss:": true };
-const BAD_URL = "FALKORDB_URL must look like redis://[user:password@]host:port (rediss:// for TLS), URL-encoded";
+// falkor:// is the scheme FalkorDB Cloud shows; it speaks the same protocol as redis://.
+const TLS_BY_PROTOCOL: Record<string, boolean> = { "redis:": false, "rediss:": true, "falkor:": false, "falkors:": true };
+const BAD_URL =
+  "FALKORDB_URL must look like redis://[user:password@]host:port or falkor://… (rediss:// or falkors:// for TLS), URL-encoded";
 
 /** An error whose message is safe to show to visitors. */
 export class LiveError extends Error {}
@@ -32,7 +34,7 @@ function decode(part: string): string | undefined {
   }
 }
 
-/** Client options from FALKORDB_URL: redis://[user:password@]host:port, or rediss:// for TLS. */
+/** Client options from FALKORDB_URL: redis:// or falkor://[user:password@]host:port, rediss:// or falkors:// for TLS. */
 function connectOptions(): FalkorDBOptions {
   const raw = process.env.FALKORDB_URL;
   if (!raw) throw new LiveError("FALKORDB_URL is not set");

@@ -6,7 +6,6 @@ import json
 import subprocess
 import time
 import uuid
-from functools import lru_cache
 
 import httpx
 
@@ -26,10 +25,24 @@ def compose(*args: str, check: bool = True, timeout: int = 120) -> str:
     return proc.stdout
 
 
-@lru_cache(maxsize=1)
+_catalog: dict[str, dict] | None = None
+
+
 def services() -> dict[str, dict]:
-    """Service catalog derived from the compose file (labels + env), keyed by name."""
-    cfg = json.loads(compose("config", "--format", "json"))
+    """Service catalog derived from the compose file (labels + env), keyed by name. Empty when the demo
+    stack's compose file or Docker isn't available: then there is no live health source, and the tools
+    fall back to what the graph knows. Only a successful read is cached, so a later `demo up` is seen."""
+    global _catalog
+    if _catalog is None:
+        try:
+            cfg = json.loads(compose("config", "--format", "json"))
+        except (RuntimeError, OSError, ValueError, subprocess.TimeoutExpired):
+            return {}
+        _catalog = _catalog_from(cfg)
+    return _catalog
+
+
+def _catalog_from(cfg: dict) -> dict[str, dict]:
     out = {}
     for name, svc in cfg["services"].items():
         labels = svc.get("labels") or {}
@@ -57,7 +70,7 @@ def services() -> dict[str, dict]:
 def stats(service: str, window: float = 20.0) -> dict:
     svc = services().get(service)
     if not svc:
-        return {"service": service, "status": "unknown", "error": f"no such service '{service}'"}
+        return {"service": service, "status": "unknown", "error": f"no live health source for '{service}'"}
     try:
         r = httpx.get(f"http://{config.STATS_HOST}:{svc['port']}/_stats", params={"window": window}, timeout=2)
         data = r.json()

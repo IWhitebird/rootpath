@@ -7,3 +7,5 @@ demo/state/
 bench/runs/
 .oncall/
 
+dist/
+build/

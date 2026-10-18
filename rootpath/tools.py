@@ -36,10 +36,17 @@ MAX_HOPS = 6
 
 # ---------------------------------------------------------------- investigation trace
 
-_inv = {"id": os.environ.get("ONCALL_INVESTIGATION_ID"), "step": 0, "created": False}
+_inv = {"id": os.environ.get("ONCALL_INVESTIGATION_ID"), "step": 0, "created": False, "last": 0.0}
+# A long-lived server (rootpath start) serves many sessions: after this much quiet, the next tool call
+# starts a new investigation instead of appending to the old one. A pinned id (headless runs) never rolls over.
+INVESTIGATION_IDLE_S = 15 * 60
 
 
 def investigation_id() -> str:
+    pinned = bool(os.environ.get("ONCALL_INVESTIGATION_ID"))
+    last = _inv.get("last", 0.0)
+    if not pinned and _inv["id"] and last and time.time() - last > INVESTIGATION_IDLE_S:
+        _inv.update(id=None, step=0, created=False)
     if not _inv["id"]:
         _inv["id"] = f"inv-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:4]}"
     if not _inv["created"]:
@@ -62,6 +69,7 @@ def _trace(tool: str, note: str, touched: list[tuple[str, str]] = ()) -> None:
     try:
         inv = investigation_id()
         _inv["step"] += 1
+        _inv["last"] = time.time()
         step = {"inv": inv, "n": _inv["step"], "tool": tool, "note": note[:300], "now": time.time()}
         keys_by_label: dict[str, list[str]] = {}
         for label, key in dict.fromkeys(touched) or [("Investigation", inv)]:
@@ -194,6 +202,8 @@ def rank_suspects(symptom_service: str, window_minutes: int = 60) -> dict:
     combining live health, recent changes (deploys + flag flips), and betweenness centrality.
     Also returns the top suspect's runbooks and the past incidents caused there, with their fixes."""
     snapshot = _fresh()
+    if not snapshot:
+        return _rank_without_health(symptom_service, window_minutes)
     since = time.time() - window_minutes * 60
     candidates = store.read(
         """MATCH p = (s:Service {name: $s})-[:CALLS*0..6]->(d:Service)
@@ -352,6 +362,33 @@ def rank_suspects(symptom_service: str, window_minutes: int = 60) -> dict:
             f"{_change_line(r['change'])} -> {r['target']}" for r in outside
         ],
         "scoring": "deepest unhealthy +0.4, down +0.3, own errors +0.2, slow +0.15 and fresh change +0.35 (only where the failure starts)",
+    }
+
+
+def _rank_without_health(symptom_service: str, window_minutes: int) -> dict:
+    """No live health source (a mapped system without connectors, or the demo stopped): say so, and
+    give the agent what the graph still knows about the dependency path."""
+    path = store.read(
+        """MATCH p = (s:Service {name: $s})-[:CALLS*0..6]->(d:Service)
+           RETURN d.name AS service, min(length(p)) AS hops ORDER BY hops, service""",
+        {"s": symptom_service},
+    )
+    if not path:
+        return {"error": f"unknown service '{symptom_service}'", "known": _known_services()}
+    changes = recent_changes(symptom_service, minutes=window_minutes)["changes"]
+    _trace(
+        "rank_suspects",
+        f"no live health; {len(path)} services downstream of {symptom_service}",
+        [("Service", r["service"]) for r in path],
+    )
+    return {
+        "symptom_service": symptom_service,
+        "top_suspect": None,
+        "note": "No live health source is connected, so Rootpath cannot tell where the failure starts. "
+        "Check the services below (logs, dashboards), starting with the ones that changed recently.",
+        "dependency_path (downstream, possible causes)": path,
+        "recent_changes_on_the_path": changes,
+        "context_by_changed_service": {c["affects_service"]: _service_context(c["affects_service"]) for c in changes},
     }
 
 

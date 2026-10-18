@@ -5,7 +5,11 @@
       {
         "matcher": "mcp__(plugin_rootpath_)?oncall__(rollback_service|restart_service|set_feature_flag)",
         "hooks": [
-          { "type": "command", "command": "uv run --quiet --directory \"${CLAUDE_PLUGIN_ROOT}\" python -m rootpath.guard", "timeout": 20 }
+          {
+            "type": "command",
+            "command": "FALKORDB_URL=\"$CLAUDE_PLUGIN_OPTION_FALKORDB_URL\" ONCALL_GRAPH=\"$CLAUDE_PLUGIN_OPTION_GRAPH\" ROOTPATH_PLUGIN_ROOT=\"${CLAUDE_PLUGIN_ROOT}\" sh -c 'command -v rootpath >/dev/null 2>&1 && exec rootpath \"$@\" || exec uv run --quiet --directory \"$ROOTPATH_PLUGIN_ROOT\" rootpath \"$@\"' rootpath guard",
+            "timeout": 20
+          }
         ]
       }
     ]
