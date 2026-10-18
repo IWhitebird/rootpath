@@ -143,7 +143,7 @@ pre.code .k { color: var(--code-key); } pre.code .s { color: var(--code-str); } 
 .features p { margin-top: 8px; color: var(--muted); }
 
 /* ---------- results ---------- */
-.cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-block: 32px 18px; }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-block: 32px 18px; }
 .card { display: grid; grid-template-rows: auto auto 1fr; gap: 4px; padding: 22px 20px 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
 .card > b { font: 400 clamp(1.7rem, 2.6vw, 2.1rem)/1.1 var(--display); letter-spacing: -0.02em; }
 .card .what { color: var(--muted); font-size: 0.9rem; }
@@ -151,13 +151,20 @@ pre.code .k { color: var(--code-key); } pre.code .s { color: var(--code-str); } 
 .pair .row { display: grid; grid-template-columns: 62px minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: 0.84rem; }
 .pair .who { color: var(--muted); }
 .pair .row.us .who { color: var(--ink); font-weight: 600; }
-.pair .bar { height: 8px; border-radius: 4px; overflow: hidden; }
-.pair .bar:has(i) { background: var(--surface-2); }
+.pair .bar { height: 8px; border-radius: 4px; overflow: hidden; background: var(--surface-2); }
 .pair .bar i { display: block; height: 100%; border-radius: 4px; background: var(--idle); }
 .pair .row.us .bar i { background: var(--path); }
 .pair .val { font: 600 0.88rem/1 var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
-.pair .val.good { color: var(--ok); }
-.pair .val.bad { color: var(--bad); }
+.card.checks { grid-template-rows: none; align-content: center; gap: 0; padding-block: 12px; }
+.check { display: grid; grid-template-columns: minmax(0, 1fr) 70px 58px; align-items: center; gap: 10px; padding-block: 16px; border-top: 1px solid var(--line); }
+.check:nth-child(2) { border-top: 0; }
+.check.head { padding-block: 8px; border-top: 0; font: 600 0.72rem/1.2 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.check.head span:nth-child(2) { color: var(--ink); }
+.check > span:first-child { font-size: 1.02rem; font-weight: 500; }
+.check .val, .check.head span:not(:first-child) { text-align: right; }
+.check .val { font: 600 0.95rem/1 var(--mono); }
+.check .val.good { color: var(--ok); }
+.check .val.bad { color: var(--bad); }
 
 /* ---------- get started ---------- */
 .start { list-style: none; margin: 32px 0 20px; padding: 0; counter-reset: step; display: grid; gap: 26px; max-width: 720px; }
@@ -178,6 +185,7 @@ pre.code .k { color: var(--code-key); } pre.code .s { color: var(--code-str); } 
   .steps { max-height: 320px; }
   .features { grid-template-columns: minmax(0, 1fr); }
   .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .card.checks { grid-column: 1 / -1; }
 }
 @media (max-width: 560px) {
   .cards { grid-template-columns: minmax(0, 1fr); }
