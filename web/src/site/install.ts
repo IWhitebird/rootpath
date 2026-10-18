@@ -1,4 +1,4 @@
-/** The install section: a snippet per agent host, and a copy button. */
+/** The install section (a snippet per agent host) and the copy buttons. */
 import { byId, esc } from "../lib/html";
 
 interface Host {
@@ -50,21 +50,26 @@ export function renderInstall(): void {
   }
   show(all[0]);
 
-  const copy = byId("copy");
-  copy.onclick = async () => {
-    try {
-      await navigator.clipboard.writeText(snippet.textContent ?? "");
-      copy.textContent = "Copied";
-    } catch {
-      const range = document.createRange();
-      range.selectNodeContents(snippet);
-      const selection = getSelection();
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-      copy.textContent = "Selected";
-    }
-    setTimeout(() => {
-      copy.textContent = "Copy";
-    }, 1600);
-  };
+  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-copy]")) {
+    const source = byId(button.dataset.copy ?? "");
+    button.onclick = () => void copyText(button, source);
+  }
+}
+
+/** Copy an element's text, or select it where the clipboard is not available. */
+async function copyText(button: HTMLElement, source: HTMLElement): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(source.textContent ?? "");
+    button.textContent = "Copied";
+  } catch {
+    const range = document.createRange();
+    range.selectNodeContents(source);
+    const selection = getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    button.textContent = "Selected";
+  }
+  setTimeout(() => {
+    button.textContent = "Copy";
+  }, 1600);
 }
