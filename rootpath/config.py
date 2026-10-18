@@ -2,17 +2,31 @@
 
 import os
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 ROOT = Path(os.environ.get("ONCALL_ROOT", Path(__file__).resolve().parents[1]))
 DEMO = ROOT / "demo"
 STATE = Path(os.environ.get("ONCALL_STATE", DEMO / "state"))
 COMPOSE_FILE = Path(os.environ.get("ONCALL_COMPOSE_FILE", DEMO / "docker-compose.yml"))
 
-_url = urlparse(os.environ.get("FALKORDB_URL", "redis://localhost:6380"))
-FALKORDB_HOST = _url.hostname or "localhost"
-FALKORDB_PORT = _url.port or 6379
-FALKORDB_PASSWORD = _url.password
+
+def falkordb_connection(url: str) -> dict:
+    """FalkorDB() keyword arguments for a redis:// URL, or rediss:// for TLS (FalkorDB Cloud:
+    rediss://user:password@host:port). Percent-encoded credentials are decoded."""
+    u = urlparse(url)
+    if u.scheme not in ("redis", "rediss"):
+        raise ValueError(f"FALKORDB_URL must start with redis:// or rediss://, got {u.scheme or 'no'} scheme")
+    return {
+        "host": u.hostname or "localhost",
+        "port": u.port or 6379,
+        "username": unquote(u.username) if u.username else None,
+        "password": unquote(u.password) if u.password else None,
+        "ssl": u.scheme == "rediss",
+    }
+
+
+FALKORDB_URL = os.environ.get("FALKORDB_URL") or "redis://localhost:6380"  # empty counts as unset
+FALKORDB = falkordb_connection(FALKORDB_URL)
 GRAPH = os.environ.get("ONCALL_GRAPH", "oncall")
 
 # Stats endpoints are reached on the host via the ports published in the compose file.

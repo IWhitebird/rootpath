@@ -17,6 +17,7 @@ EXPECTED = {
     "pool-after-deploy": ("restart", "inventory"),
 }
 OUT = config.ROOT / "bench"
+WEB_BENCH = config.ROOT / "web" / "public" / "data" / "bench.json"
 
 
 def _wait(cond, timeout: float, every: float = 3.0) -> bool:
@@ -75,6 +76,7 @@ def run(scenarios: list[str], modes: list[str], repeats: int = 1) -> None:
                 print(json.dumps(results[-1], indent=1), flush=True)
                 results_file.write_text(json.dumps(results, indent=2))
     write_report(results)
+    export_web_data()
     reset()
 
 
@@ -86,12 +88,31 @@ def diagnosis_calls(tools: list[str]) -> int:
     return next((i for i, t in enumerate(tools) if t in ACTIONS), len(tools))
 
 
+def derive(r: dict) -> dict:
+    """Adds the fields the reports show: calls to root cause, logs read on the way, clean fix."""
+    tools = r.get("tools", [])
+    r["diagnosis_calls"] = diagnosis_calls(tools)
+    r["logs_read"] = tools[: r["diagnosis_calls"]].count("get_logs")
+    r["clean"] = bool(r.get("correct_action")) and not r.get("wrong_actions")
+    return r
+
+
+def export_web_data() -> None:
+    """Both telemetry modes' results as the website shows them: derived fields in, tool sequences out."""
+    data = {}
+    for telemetry in ("full", "basic"):
+        path = OUT / f"results-{telemetry}.json"
+        data[telemetry] = [derive(r) for r in json.loads(path.read_text())] if path.exists() else []
+        for r in data[telemetry]:
+            r.pop("tools", None)
+    WEB_BENCH.parent.mkdir(parents=True, exist_ok=True)
+    WEB_BENCH.write_text(json.dumps(data, separators=(",", ":")))
+    print(f"{WEB_BENCH.relative_to(config.ROOT)}: {len(data['full'])} full + {len(data['basic'])} basic rows")
+
+
 def write_report(results: list[dict]) -> None:
     for r in results:
-        if "tools" in r:
-            r["diagnosis_calls"] = diagnosis_calls(r["tools"])
-            r["logs_read"] = r["tools"][: r["diagnosis_calls"]].count("get_logs")
-        r["clean"] = bool(r.get("correct_action")) and not r.get("wrong_actions")
+        derive(r)
     lines = [
         "# Benchmark: graph tools vs baseline tools",
         "",

@@ -134,10 +134,12 @@ def test_blast_radius_and_paths(stack):
 def test_web_api(stack):
     from fastapi.testclient import TestClient
 
-    from rootpath.web import app
+    from rootpath.web import DIST, app
 
     c = TestClient(app)
-    assert c.get("/").status_code == 200
+    index = c.get("/")
+    assert index.status_code == 200
+    assert ("npm run build" in index.text) != (DIST / "console.html").exists()  # the console, or how to build it
     g = c.get("/api/graph").json()
     types = {n["type"] for n in g["nodes"]}
     assert {"Service", "Team", "Incident", "Flag"} <= types
@@ -145,3 +147,62 @@ def test_web_api(stack):
     assert all(link["source"] in ids and link["target"] in ids for link in g["links"])
     assert set(c.get("/api/health").json()["services"]) == set(infra.services())
     assert c.post("/api/chaos/does-not-exist").status_code == 404
+
+
+@pytest.fixture
+def scratch_graph(stack, monkeypatch):
+    """An empty, throwaway graph so mapping tests never touch the demo data."""
+    from rootpath import ingest
+
+    monkeypatch.setattr(config, "GRAPH", "rootpath-test-map")
+    monkeypatch.setattr(store, "_graph", None)
+    store.delete_graph()
+    store._graph = None
+    ingest.ensure_schema()
+    yield
+    store.delete_graph()
+    store._graph = None
+
+
+def test_map_tools_build_a_graph_claude_code_can_reason_over(scratch_graph):
+    assert tools.map_overview()["services"] == []
+    for name, team, tier, edge in [
+        ("web", "storefront", 1, True),
+        ("orders", "commerce", 1, False),
+        ("ledger", "finance", 2, False),
+    ]:
+        assert "error" not in tools.upsert_service(name, team=team, tier=tier, internet_facing=edge)
+    assert "error" not in tools.add_dependency("web", "orders", evidence="compose.yml: web.environment.ORDERS_URL")
+    assert "error" not in tools.add_dependency("orders", "ledger", evidence="orders/client.py:12 LEDGER_HOST")
+    tools.set_team("commerce", channel="#commerce", on_call="maya", members=["maya", "jon"], escalates_to="storefront")
+    tools.register_flag("fast_checkout", affects=["orders"], team="commerce")
+    tools.add_runbook("orders", "RB-ORD-01", "Orders 5xx", "1. check ledger\n2. roll back orders")
+    change = tools.record_change("deploy", author="jon", service="orders", version="3.1.0", prev_version="3.0.9")
+    assert change["change_id"].startswith("chg-")
+
+    # idempotent: mapping again changes nothing
+    tools.upsert_service("orders", team="commerce", tier=1)
+    tools.add_dependency("web", "orders", evidence="compose.yml: web.environment.ORDERS_URL")
+    assert (
+        store.read("MATCH (:Service {name: 'web'})-[r:CALLS]->(:Service {name: 'orders'}) RETURN count(r) AS n")[0]["n"]
+        == 1
+    )
+
+    # validation: no invented services, no evidence-free edges, no bad names
+    assert "error" in tools.add_dependency("web", "nope", evidence="x.yml: nope")
+    assert "error" in tools.add_dependency("web", "ledger", evidence="")
+    assert "error" in tools.upsert_service("Bad Name!")
+    assert "error" in tools.record_change("flag", author="jon", flag="unknown_flag", enabled=True)
+
+    # everything mapped is tagged, and the reasoning tools see it
+    assert {r["source"] for r in store.read("MATCH (s:Service) RETURN s.source AS source")} == {"claude-code"}
+    edge = store.read("MATCH (:Service {name:'orders'})-[r:CALLS]->(:Service {name:'ledger'}) RETURN r.evidence AS e")[
+        0
+    ]
+    assert "client.py" in edge["e"]
+    radius = tools.get_blast_radius("ledger")
+    assert {r["service"] for r in radius["affected_if_it_fails (upstream callers)"]} == {"orders", "web"}
+    owner = tools.get_owner("orders")
+    assert owner["on_call"] == "maya" and owner["escalates_to"] == "storefront" and owner["runbooks"]
+    changes = tools.recent_changes("web")["changes"]
+    assert any(c["service"] == "orders" and c["version"] == "3.1.0" for c in changes)

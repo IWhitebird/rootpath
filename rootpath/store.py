@@ -17,8 +17,7 @@ _graph = None
 def graph():
     global _graph
     if _graph is None:
-        db = FalkorDB(host=config.FALKORDB_HOST, port=config.FALKORDB_PORT, password=config.FALKORDB_PASSWORD)
-        _graph = db.select_graph(config.GRAPH)
+        _graph = FalkorDB(**config.FALKORDB).select_graph(config.GRAPH)
     return _graph
 
 

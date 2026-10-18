@@ -7,7 +7,7 @@
     "url": "https://github.com/IWhitebird"
   },
   "license": "Apache-2.0",
-  "homepage": "https://iwhitebird.github.io/rootpath/",
+  "homepage": "https://github.com/IWhitebird/rootpath",
   "repository": "https://github.com/IWhitebird/rootpath",
   "keywords": [
     "sre",
@@ -29,8 +29,25 @@
         "mcp"
       ],
       "env": {
-        "ONCALL_AGENT": "claude-code"
+        "ONCALL_AGENT": "claude-code",
+        "FALKORDB_URL": "${user_config.falkordb_url}",
+        "ONCALL_GRAPH": "${user_config.graph}"
       }
+    }
+  },
+  "userConfig": {
+    "falkordb_url": {
+      "type": "string",
+      "title": "FalkorDB URL",
+      "description": "Where your Rootpath graph lives. Local Docker: redis://localhost:6380. FalkorDB Cloud: rediss://<user>:<password>@<host>:<port>.",
+      "default": "redis://localhost:6380",
+      "sensitive": true
+    },
+    "graph": {
+      "type": "string",
+      "title": "Graph name",
+      "description": "Name of the FalkorDB graph that holds your system.",
+      "default": "oncall"
     }
   }
 }

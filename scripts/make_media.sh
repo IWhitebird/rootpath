@@ -4,8 +4,8 @@ set -e
 cd "$(dirname "$0")/.."
 FRAMES=${FRAMES:-/tmp/oncall-frames}
 SCENARIO=${1:-flag}
-uv run python site/build.py >/dev/null
-python3 -m http.server 7201 --bind 127.0.0.1 --directory site >/dev/null 2>&1 &
+(cd web && npm run build >/dev/null)
+python3 -m http.server 7201 --bind 127.0.0.1 --directory web/dist >/dev/null 2>&1 &
 SERVER=$!
 trap 'kill $SERVER' EXIT
 sleep 1

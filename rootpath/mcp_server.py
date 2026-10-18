@@ -52,6 +52,17 @@ def build(mode: str = "graph") -> FastMCP:
             add(fn, READ)
         for fn in (tools.open_incident, tools.notify_owner, tools.resolve_incident):
             add(fn, WRITE)
+        # Mapping: how Claude Code builds the graph of a real system (/rootpath:map).
+        add(tools.map_overview, READ)
+        for fn in (
+            tools.upsert_service,
+            tools.add_dependency,
+            tools.set_team,
+            tools.add_runbook,
+            tools.register_flag,
+            tools.record_change,
+        ):
+            add(fn, WRITE)
     else:
         add(tools.list_changes_flat, READ)
     for fn in (tools.rollback_service, tools.restart_service, tools.set_feature_flag):

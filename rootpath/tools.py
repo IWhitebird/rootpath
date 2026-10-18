@@ -6,12 +6,14 @@ real infrastructure, default to dry-run, and write (:Action)-[:BECAUSE]->(:Evide
 graph so every change the agent makes is explainable later. Every call is also recorded as
 a STEP of the current (:Investigation), which the UI replays."""
 
+import hashlib
 import json
 import os
 import re
 import time
 import uuid
 from collections import Counter
+from datetime import datetime
 
 import httpx
 
@@ -60,17 +62,17 @@ def _trace(tool: str, note: str, touched: list[tuple[str, str]] = ()) -> None:
     try:
         inv = investigation_id()
         _inv["step"] += 1
-        n, now = _inv["step"], time.time()
-        store.query(
-            "MATCH (v:Investigation {id: $id}) SET v.steps = $n, v.updated_at = $now", {"id": inv, "n": n, "now": now}
-        )
-        targets = list(dict.fromkeys(touched)) or [("Investigation", inv)]
-        for label, key in targets:
-            prop = KEYS.get(label, "id")
+        step = {"inv": inv, "n": _inv["step"], "tool": tool, "note": note[:300], "now": time.time()}
+        keys_by_label: dict[str, list[str]] = {}
+        for label, key in dict.fromkeys(touched) or [("Investigation", inv)]:
+            keys_by_label.setdefault(label, []).append(key)
+        for label, keys in keys_by_label.items():  # one round trip per label (labels can't be parameters)
             store.query(
-                f"""MATCH (v:Investigation {{id: $inv}}), (x:{label} {{{prop}: $key}})
+                f"""MATCH (v:Investigation {{id: $inv}}) SET v.steps = $n, v.updated_at = $now
+                    WITH v UNWIND $keys AS key
+                    MATCH (x:{label} {{{KEYS.get(label, "id")}: key}})
                     CREATE (v)-[:STEP {{n: $n, tool: $tool, note: $note, at: $now}}]->(x)""",
-                {"inv": inv, "key": key, "n": n, "tool": tool, "note": note[:300], "now": now},
+                {**step, "keys": keys},
             )
     except Exception:
         pass  # tracing must never break a tool
@@ -974,6 +976,247 @@ def list_changes_flat(minutes: int = 120) -> dict:
         out.append(v)
     _trace("list_changes_flat", f"{len(out)} changes in last {minutes} min")
     return {"minutes": minutes, "changes": out[::-1]}
+
+
+# ---------------------------------------------------------------- mapping tools (used by /rootpath:map)
+#
+# Claude Code maps a real system into the graph through these tools instead of writing Cypher:
+# names are validated, every write is an idempotent MERGE, and everything they create is tagged
+# source = "claude-code" with the evidence it was based on, so inferred structure stays reviewable.
+
+_NAME = re.compile(r"^[a-z0-9][a-z0-9._-]{0,62}$")
+MAPPED = "claude-code"
+
+
+def _bad_name(kind: str, value: str) -> dict | None:
+    if not isinstance(value, str) or not _NAME.match(value):
+        return {"error": f"invalid {kind} name {value!r}: use lowercase letters, digits, '.', '_' or '-' (max 63)"}
+    return None
+
+
+def _known_services() -> list[str]:
+    return [r["name"] for r in store.read("MATCH (s:Service) RETURN s.name AS name ORDER BY name")]
+
+
+def map_overview() -> dict:
+    """What the graph already knows: counts per node label, every service with its owner and
+    dependencies, teams and flags. Call this before mapping so you update instead of duplicating."""
+    counts = store.read("MATCH (n) UNWIND labels(n) AS label RETURN label, count(*) AS n ORDER BY label")
+    services = store.read(
+        """MATCH (s:Service)
+           OPTIONAL MATCH (t:Team)-[:OWNS]->(s)
+           OPTIONAL MATCH (s)-[c:CALLS]->(d:Service)
+           RETURN s.name AS service, t.name AS team, s.tier AS tier, coalesce(s.source, 'ingest') AS source,
+                  collect(DISTINCT d.name) AS calls ORDER BY service"""
+    )
+    teams = store.read(
+        """MATCH (t:Team) OPTIONAL MATCH (p:Person)-[:ON_CALL_FOR]->(t)
+           RETURN t.name AS team, t.channel AS channel, p.handle AS on_call ORDER BY team"""
+    )
+    flags = store.read(
+        "MATCH (f:Flag) OPTIONAL MATCH (f)-[:AFFECTS]->(s:Service) RETURN f.name AS flag, collect(s.name) AS affects"
+    )
+    _trace("map_overview", f"{len(services)} services, {len(teams)} teams, {len(flags)} flags in the graph")
+    return {"labels": {r["label"]: r["n"] for r in counts}, "services": services, "teams": teams, "flags": flags}
+
+
+def upsert_service(
+    name: str, team: str = "", tier: int = 2, internet_facing: bool = False, description: str = ""
+) -> dict:
+    """Create or update a service (and its owning team). tier: 1 = user-facing or critical, 3 = background."""
+    if err := _bad_name("service", name) or (team and _bad_name("team", team)):
+        return err
+    if tier not in (1, 2, 3):
+        return {"error": "tier must be 1, 2 or 3"}
+    store.query(
+        """MERGE (s:Service {name: $name})
+           SET s.tier = $tier, s.internet_facing = $internet_facing, s.description = $description,
+               s.source = coalesce(s.source, $source), s.mapped_at = $now""",
+        {
+            "name": name,
+            "tier": tier,
+            "internet_facing": internet_facing,
+            "description": description[:300],
+            "source": MAPPED,
+            "now": time.time(),
+        },
+    )
+    if team:
+        store.query(
+            """MATCH (s:Service {name: $name})
+               OPTIONAL MATCH (old:Team)-[o:OWNS]->(s) WHERE old.name <> $team DELETE o
+               WITH s MERGE (t:Team {name: $team}) MERGE (t)-[:OWNS]->(s)""",
+            {"name": name, "team": team},
+        )
+    _trace("upsert_service", f"service {name}" + (f" owned by {team}" if team else ""), [("Service", name)])
+    return {"service": name, "team": team or None, "tier": tier, "internet_facing": internet_facing}
+
+
+def add_dependency(caller: str, callee: str, evidence: str, optional: bool = False) -> dict:
+    """Record that `caller` calls `callee`. `evidence` must say where you saw it (file and key or line)."""
+    if err := _bad_name("service", caller) or _bad_name("service", callee):
+        return err
+    if not evidence or len(evidence.strip()) < 5:
+        return {"error": "evidence is required: name the file and the line or key that shows this dependency"}
+    known = set(_known_services())
+    missing = [s for s in (caller, callee) if s not in known]
+    if missing:
+        return {"error": f"unknown service(s) {missing}: call upsert_service first", "known": sorted(known)}
+    if caller == callee:
+        return {"error": "a service cannot depend on itself"}
+    store.query(
+        """MATCH (a:Service {name: $a}), (b:Service {name: $b})
+           MERGE (a)-[r:CALLS]->(b)
+           SET r.declared = true, r.optional = $optional, r.source = coalesce(r.source, $source),
+               r.evidence = $evidence, r.mapped_at = $now""",
+        {
+            "a": caller,
+            "b": callee,
+            "optional": optional,
+            "source": MAPPED,
+            "evidence": evidence[:300],
+            "now": time.time(),
+        },
+    )
+    _trace("add_dependency", f"{caller} -> {callee} ({evidence[:80]})", [("Service", caller), ("Service", callee)])
+    return {"caller": caller, "callee": callee, "optional": optional, "evidence": evidence}
+
+
+def set_team(
+    team: str, channel: str = "", on_call: str = "", members: list[str] | None = None, escalates_to: str = ""
+) -> dict:
+    """Create or update a team: chat channel, members, who is on call now, and the team it escalates to."""
+    people = list(dict.fromkeys((members or []) + ([on_call] if on_call else [])))
+    for value, kind in [(team, "team"), (escalates_to, "team"), *[(p, "person") for p in people]]:
+        if value and (err := _bad_name(kind, value)):
+            return err
+    store.query(
+        "MERGE (t:Team {name: $team}) SET t.channel = $channel, t.source = coalesce(t.source, $source)",
+        {"team": team, "channel": channel, "source": MAPPED},
+    )
+    if people:
+        store.query(
+            """MATCH (t:Team {name: $team}) UNWIND $people AS handle
+               MERGE (p:Person {handle: handle}) MERGE (p)-[:MEMBER_OF]->(t)""",
+            {"team": team, "people": people},
+        )
+    if on_call:
+        store.query(
+            """MATCH (t:Team {name: $team})
+               OPTIONAL MATCH (:Person)-[old:ON_CALL_FOR]->(t) DELETE old
+               WITH t MATCH (p:Person {handle: $on_call}) MERGE (p)-[:ON_CALL_FOR]->(t)""",
+            {"team": team, "on_call": on_call},
+        )
+    if escalates_to:
+        store.query(
+            """MATCH (t:Team {name: $team}) OPTIONAL MATCH (t)-[old:ESCALATES_TO]->() DELETE old
+               WITH t MERGE (e:Team {name: $esc}) MERGE (t)-[:ESCALATES_TO]->(e)""",
+            {"team": team, "esc": escalates_to},
+        )
+    _trace("set_team", f"team {team}" + (f", on call {on_call}" if on_call else ""), [("Team", team)])
+    return {
+        "team": team,
+        "channel": channel or None,
+        "on_call": on_call or None,
+        "members": people,
+        "escalates_to": escalates_to or None,
+    }
+
+
+def add_runbook(service: str, runbook_id: str, title: str, steps: str) -> dict:
+    """Attach a runbook (plain-text steps) to a service."""
+    if err := _bad_name("service", service) or _bad_name("runbook", runbook_id.lower()):
+        return err
+    if service not in _known_services():
+        return {"error": f"unknown service {service!r}: call upsert_service first"}
+    store.query(
+        """MATCH (s:Service {name: $service})
+           MERGE (r:Runbook {id: $id}) SET r.title = $title, r.body = $steps, r.source = coalesce(r.source, $source)
+           MERGE (r)-[:FOR]->(s)""",
+        {"service": service, "id": runbook_id, "title": title[:200], "steps": steps[:4000], "source": MAPPED},
+    )
+    _trace("add_runbook", f"{runbook_id} for {service}", [("Service", service), ("Runbook", runbook_id)])
+    return {"runbook": runbook_id, "service": service}
+
+
+def register_flag(flag: str, affects: list[str], team: str = "", description: str = "") -> dict:
+    """Register a feature flag and the services whose behaviour it changes."""
+    if err := _bad_name("flag", flag) or (team and _bad_name("team", team)):
+        return err
+    unknown = sorted(set(affects) - set(_known_services()))
+    if unknown:
+        return {"error": f"unknown service(s) {unknown}: call upsert_service first"}
+    store.query(
+        """MERGE (f:Flag {name: $flag}) SET f.description = $description, f.source = coalesce(f.source, $source)
+           WITH f UNWIND $affects AS svc MATCH (s:Service {name: svc}) MERGE (f)-[:AFFECTS]->(s)""",
+        {"flag": flag, "description": description[:300], "affects": affects, "source": MAPPED},
+    )
+    if team:
+        store.query(
+            "MATCH (f:Flag {name: $flag}) MERGE (t:Team {name: $team}) MERGE (t)-[:OWNS]->(f)",
+            {"flag": flag, "team": team},
+        )
+    _trace(
+        "register_flag",
+        f"flag {flag} affects {', '.join(affects)}",
+        [("Flag", flag)] + [("Service", s) for s in affects],
+    )
+    return {"flag": flag, "affects": affects, "team": team or None}
+
+
+def record_change(
+    kind: str,
+    author: str,
+    at_iso: str = "",
+    service: str = "",
+    version: str = "",
+    prev_version: str = "",
+    flag: str = "",
+    enabled: bool | None = None,
+    note: str = "",
+) -> dict:
+    """Record a deploy (kind="deploy": service, version, prev_version) or a flag flip (kind="flag": flag,
+    enabled) that happened at `at_iso` (ISO 8601; default now)."""
+    try:
+        at = datetime.fromisoformat(at_iso.replace("Z", "+00:00")).timestamp() if at_iso else time.time()
+    except ValueError:
+        return {"error": f"at_iso {at_iso!r} is not an ISO 8601 timestamp"}
+    if kind == "deploy":
+        if err := _bad_name("service", service):
+            return err
+        if service not in _known_services() or not version:
+            return {"error": "a deploy needs a known service and a version"}
+        change = {
+            "kind": "deploy",
+            "service": service,
+            "version": version,
+            "prev_version": prev_version or None,
+            "author": author,
+            "note": note,
+            "at": at,
+        }
+    elif kind == "flag":
+        if err := _bad_name("flag", flag):
+            return err
+        if not store.read("MATCH (f:Flag {name: $f}) RETURN f.name AS n", {"f": flag}):
+            return {"error": f"unknown flag {flag!r}: call register_flag first"}
+        if enabled is None:
+            return {"error": "a flag change needs enabled=true or enabled=false"}
+        change = {
+            "kind": "flag",
+            "flag": flag,
+            "from": not enabled,
+            "to": enabled,
+            "author": author,
+            "note": note,
+            "at": at,
+        }
+    else:
+        return {"error": "kind must be 'deploy' or 'flag'"}
+    change["id"] = "chg-" + hashlib.sha1(json.dumps(change, sort_keys=True, default=str).encode()).hexdigest()[:8]
+    ingest.write_changes([change], source=MAPPED)
+    _trace("record_change", f"{kind} {service or flag} by {author}", [("Change", change["id"])])
+    return {"change_id": change["id"], **{k: v for k, v in change.items() if k != "id"}}
 
 
 def to_json(value) -> str:

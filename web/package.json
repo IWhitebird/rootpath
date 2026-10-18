@@ -1,0 +1,24 @@
+{
+  "name": "rootpath-web",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "falkordb": "6.8.0",
+    "force-graph": "1.47.4"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@vercel/node": "24.0.3",
+    "typescript": "5.9.3",
+    "vite": "6.4.4"
+  }
+}

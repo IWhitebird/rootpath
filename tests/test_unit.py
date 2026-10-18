@@ -1,12 +1,53 @@
 """Fast tests with the graph and Docker mocked out."""
 
+import argparse
 import asyncio
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from rootpath import config, guard, infra, store, tools
+from rootpath import config, guard, infra, ingest, store, tools
+
+
+@pytest.mark.parametrize(
+    "url,expected",
+    [
+        ("redis://localhost:6380", ("localhost", 6380, None, None, False)),
+        ("redis://db", ("db", 6379, None, None, False)),
+        ("redis://:pw@db:7000", ("db", 7000, None, "pw", False)),
+        (
+            "rediss://falkordb:s3cr%40t@r-1.falkordb.cloud:55011",
+            ("r-1.falkordb.cloud", 55011, "falkordb", "s3cr@t", True),
+        ),
+    ],
+)
+def test_falkordb_url(url, expected):
+    c = config.falkordb_connection(url)
+    assert (c["host"], c["port"], c["username"], c["password"], c["ssl"]) == expected
+
+
+def test_falkordb_url_rejects_other_schemes():
+    with pytest.raises(ValueError, match="redis://"):
+        config.falkordb_connection("https://user:secret@db:6379")
+
+
+def test_store_connects_with_parsed_url(monkeypatch):
+    seen = {}
+
+    class FakeDB:
+        def __init__(self, **kwargs):
+            seen.update(kwargs)
+
+        def select_graph(self, name):
+            return name
+
+    monkeypatch.setattr(config, "FALKORDB", config.falkordb_connection("rediss://u:p@cloud:1234"))
+    monkeypatch.setattr(store, "FalkorDB", FakeDB)
+    monkeypatch.setattr(store, "_graph", None)
+    assert store.graph() == config.GRAPH
+    assert seen == {"host": "cloud", "port": 1234, "username": "u", "password": "p", "ssl": True}
 
 
 def test_safe_read_appends_limit(monkeypatch):
@@ -185,3 +226,105 @@ def test_propose_mode_disables_actions_in_the_server(tmp_path, monkeypatch):
     propose = json.loads(Path(responder.mcp_config("graph", "inv-test", "propose")).read_text())
     assert "ONCALL_ALLOW_ACTIONS" not in auto["mcpServers"]["oncall"]["env"]
     assert propose["mcpServers"]["oncall"]["env"]["ONCALL_ALLOW_ACTIONS"] == "0"
+
+
+def _fake_sources(monkeypatch, n: int) -> list[str]:
+    """A demo of n services in a chain, each deployed once, with every write to the graph recorded."""
+    names = [f"svc{i}" for i in range(n)]
+    services = {
+        name: {
+            "name": name,
+            "team": "web",
+            "tier": 1,
+            "internet_facing": i == 0,
+            "description": "",
+            "calls": names[i + 1 : i + 2],
+            "optional_calls": [],
+            "port": None,
+        }
+        for i, name in enumerate(names)
+    }
+    stats = {
+        name: {"status": "healthy", "error_rate": 0.0, "p95_ms": 5.0, "version": "1", "calls_total": {}}
+        for name in names
+    }
+    changes = [
+        {"id": f"chg-{name}", "kind": "deploy", "at": 0, "service": name, "version": "1", "author": "ci"}
+        for name in names
+    ]
+    changes.append(
+        {"id": "chg-rb", "kind": "deploy", "at": 1, "service": "svc0", "version": "0", "rollback_of": "chg-svc0"}
+    )
+    changes.append({"id": "chg-flag", "kind": "flag", "at": 2, "flag": "f", "from": False, "to": True})
+    monkeypatch.setattr(infra, "services", lambda: services)
+    monkeypatch.setattr(infra, "all_stats", lambda window=20.0: stats)
+    monkeypatch.setattr(infra, "read_changes", lambda: changes)
+    monkeypatch.setattr(infra, "read_flags", lambda: {"f": True})
+    monkeypatch.setattr(infra, "flags_meta", lambda: {"f": {"affects": names, "team": "web", "description": ""}})
+    queries = []
+    monkeypatch.setattr(store, "query", lambda q, p=None: queries.append(q) or [])
+    return queries
+
+
+def test_full_sync_round_trips_do_not_grow_with_the_graph(monkeypatch):
+    counts = []
+    for n in (2, 6):
+        queries = _fake_sources(monkeypatch, n)
+        ingest.sync_all()
+        counts.append(len(queries))
+    assert counts[0] == counts[1]
+    writes = [q for q in queries if "MERGE" in q or "SET" in q]
+    assert writes and all(q.startswith("UNWIND $rows AS row") for q in writes)
+
+
+def test_trace_writes_one_query_per_label(monkeypatch):
+    queries = []
+    monkeypatch.setattr(store, "query", lambda q, p=None: queries.append((q, p)) or [])
+    monkeypatch.setattr(tools, "_inv", {"id": "inv-test", "step": 0, "created": True})
+    tools._trace("rank_suspects", "note", [("Service", "a"), ("Service", "b"), ("Service", "a"), ("Action", "act-1")])
+    assert [p["keys"] for _, p in queries] == [["a", "b"], ["act-1"]]
+    assert ":Service {name: key}" in queries[0][0] and ":Action {id: key}" in queries[1][0]
+    queries.clear()
+    tools._trace("query_graph", "no targets")
+    assert len(queries) == 1 and queries[0][1]["keys"] == ["inv-test"]
+
+
+def test_ingest_watch_schedules_full_syncs_and_survives_errors(monkeypatch, capsys):
+    from rootpath import cli
+
+    clock, cycles = {"t": 0.0}, []
+
+    def cycle(full):
+        cycles.append(full)
+        if len(cycles) == 1:
+            raise ConnectionError("blip")
+        return "synced"
+
+    def sleep(seconds):
+        clock["t"] += seconds
+        if len(cycles) == 14:
+            raise KeyboardInterrupt
+
+    fake_time = SimpleNamespace(monotonic=lambda: clock["t"], sleep=sleep, strftime=lambda fmt: "12:00:00")
+    monkeypatch.setattr(cli, "time", fake_time)
+    monkeypatch.setattr(cli, "_sync_cycle", cycle)
+    cli.ingest(argparse.Namespace(watch=True, interval=5.0))
+    # the failed first full sync is retried, then live cycles every 5 s and a full one 60 s later
+    assert cycles == [True, True] + [False] * 11 + [True]
+    out = capsys.readouterr().out
+    assert "sync failed: ConnectionError: blip" in out and out.rstrip().endswith("ingest stopped")
+
+
+def test_console_is_served_from_web_dist(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from rootpath import web
+
+    monkeypatch.setattr(web, "DIST", tmp_path)
+    c = TestClient(web.app)
+    hint = c.get("/")
+    assert hint.status_code == 200 and "npm run build" in hint.text
+    (tmp_path / "console.html").write_text("<!doctype html><title>console</title>")
+    built = c.get("/")
+    assert built.status_code == 200 and "<title>console</title>" in built.text
+    assert c.get("/console.js").status_code == 404

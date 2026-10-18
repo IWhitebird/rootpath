@@ -24,7 +24,7 @@ def mcp_config(mode: str, investigation_id: str, autonomy: str = "auto") -> str:
         "ONCALL_INVESTIGATION_ID": investigation_id,
         "ONCALL_AGENT": f"headless-{mode}",
         "ONCALL_TELEMETRY": config.TELEMETRY,
-        "FALKORDB_URL": os.environ.get("FALKORDB_URL", f"redis://{config.FALKORDB_HOST}:{config.FALKORDB_PORT}"),
+        "FALKORDB_URL": config.FALKORDB_URL,
     }
     if config.NOTIFY_WEBHOOK:
         env["ONCALL_NOTIFY_WEBHOOK"] = config.NOTIFY_WEBHOOK

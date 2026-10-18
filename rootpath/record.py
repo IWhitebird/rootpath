@@ -4,14 +4,19 @@ file that the static website replays in the browser, without Docker or an API ke
 import json
 import threading
 import time
+from pathlib import Path
 
-from . import infra, store
+from . import config, infra, store
 from .cli import SCENARIOS, inject, reset
 from .responder import detect, run_agent
 from .web import graph as graph_snapshot
 
+REPLAYS = config.ROOT / "web" / "public" / "data" / "replays"
 
-def record(scenario: str, out: str, mode: str = "graph") -> None:
+
+def record(scenario: str, out: str | None = None, mode: str = "graph") -> None:
+    """Writes to `out`, by default web/public/data/replays/<scenario>.json."""
+    path = Path(out) if out else REPLAYS / f"{scenario}.json"
     reset()
     for _ in range(20):
         if detect() is None:
@@ -118,6 +123,6 @@ def record(scenario: str, out: str, mode: str = "graph") -> None:
         "nodes": list(nodes.values()),
         "links": list(links.values()),
     }
-    with open(out, "w") as f:
-        json.dump(data, f, separators=(",", ":"), default=str)
-    print(f"recorded {scenario}: {len(step_rows)} steps, {len(health)} health frames, {len(nodes)} nodes -> {out}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, separators=(",", ":"), default=str))
+    print(f"recorded {scenario}: {len(step_rows)} steps, {len(health)} health frames, {len(nodes)} nodes -> {path}")

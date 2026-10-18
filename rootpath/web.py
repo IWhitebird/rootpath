@@ -5,12 +5,16 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import config, infra, ingest, store
 
 app = FastAPI(title="Rootpath")
-UI = Path(__file__).resolve().parent.parent / "ui"
+DIST = Path(__file__).resolve().parent.parent / "web" / "dist"  # the console, built by `npm run build` in web/
+NOT_BUILT = """<!doctype html><meta charset="utf-8"><title>Rootpath</title>
+<p>The console is not built yet. Run <code>npm install &amp;&amp; npm run build</code> in <code>web/</code>, then reload.</p>
+"""
 _busy = {"task": None, "since": 0.0}
 
 KEY = {
@@ -31,19 +35,14 @@ def _nid(node: dict) -> str:
     return f"{label}:{node.get(KEY.get(label, 'id'))}"
 
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 def index():
-    return FileResponse(UI / "index.html")
+    console = DIST / "console.html"
+    return FileResponse(console) if console.exists() else NOT_BUILT
 
 
-@app.get("/console.css")
-def console_css():
-    return FileResponse(UI / "console.css", media_type="text/css")
-
-
-@app.get("/console.js")
-def console_js():
-    return FileResponse(UI / "console.js", media_type="text/javascript")
+# check_dir=False: a build made while the server runs is picked up without a restart.
+app.mount("/assets", StaticFiles(directory=DIST / "assets", check_dir=False), name="assets")
 
 
 @app.get("/api/graph")

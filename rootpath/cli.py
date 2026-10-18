@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 import time
+from collections import Counter
 
 from . import config
 
@@ -159,11 +160,46 @@ def status(args) -> None:
         )
 
 
-def sync(args) -> None:
-    from . import ingest
+FULL_SYNC_EVERY = 60.0  # seconds between full syncs in `ingest --watch`
 
-    ingest.sync_all()
-    print("graph synced")
+
+def _sync_cycle(full: bool) -> str:
+    """One ingest pass: everything, or only what changes between full syncs (change log + health)."""
+    from . import infra, ingest
+
+    started = time.monotonic()
+    if full:
+        infra.services.cache_clear()  # pick up compose-file edits
+        new = ingest.sync_all(health=False)
+    else:
+        new = ingest.sync_changes()
+    health = Counter(s["status"] for s in ingest.sync_health().values())
+    services = ", ".join(f"{n} {status}" for status, n in health.most_common())
+    return (
+        f"{time.strftime('%H:%M:%S')} {'full' if full else 'live'} sync: {new} new changes, "
+        f"{services} ({time.monotonic() - started:.2f}s)"
+    )
+
+
+def ingest(args) -> None:
+    """One full sync, or with --watch keep the graph current until Ctrl-C."""
+    if not args.watch:
+        print(_sync_cycle(full=True))
+        return
+    last_full = None
+    try:
+        while True:
+            started = time.monotonic()
+            full = last_full is None or started - last_full >= FULL_SYNC_EVERY
+            try:
+                print(_sync_cycle(full), flush=True)
+                if full:
+                    last_full = started
+            except Exception as e:  # keep running through a dropped connection or a restarting service
+                print(f"{time.strftime('%H:%M:%S')} sync failed: {type(e).__name__}: {e}", flush=True)
+            time.sleep(max(0.0, args.interval - (time.monotonic() - started)))
+    except KeyboardInterrupt:
+        print("ingest stopped")
 
 
 def mcp(args) -> None:
@@ -218,7 +254,14 @@ def _wait_for_db() -> None:
         except Exception:
             store._graph = None
             time.sleep(1)
-    sys.exit("FalkorDB did not come up on " + f"{config.FALKORDB_HOST}:{config.FALKORDB_PORT}")
+    sys.exit(f"FalkorDB did not come up on {config.FALKORDB['host']}:{config.FALKORDB['port']}")
+
+
+def _seconds(value: str) -> float:
+    seconds = float(value)
+    if seconds <= 0:
+        raise argparse.ArgumentTypeError("must be greater than 0")
+    return seconds
 
 
 def main() -> None:
@@ -236,7 +279,15 @@ def main() -> None:
     c.add_argument("scenario", choices=list(SCENARIOS))
     c.set_defaults(fn=chaos)
     sub.add_parser("status", help="live health table").set_defaults(fn=status)
-    sub.add_parser("sync", help="rebuild the graph from sources").set_defaults(fn=sync)
+    ing = sub.add_parser("ingest", help="sync the graph from sources (once, or continuously with --watch)")
+    ing.add_argument(
+        "--watch",
+        action="store_true",
+        help=f"keep syncing changes + health, and everything every {FULL_SYNC_EVERY:.0f}s",
+    )
+    ing.add_argument("--interval", type=_seconds, default=5.0, help="seconds between --watch cycles (default 5)")
+    ing.set_defaults(fn=ingest)
+    sub.add_parser("sync", help="one full sync (same as `ingest`)").set_defaults(fn=ingest, watch=False)
     m = sub.add_parser("mcp", help="run the MCP server on stdio")
     m.add_argument("--mode", choices=["graph", "baseline"], default=None)
     m.set_defaults(fn=mcp)
@@ -256,7 +307,7 @@ def main() -> None:
     b.set_defaults(fn=bench)
     rec = sub.add_parser("record", help="record a real incident for the website replay")
     rec.add_argument("scenario", choices=list(SCENARIOS))
-    rec.add_argument("--out", required=True)
+    rec.add_argument("--out", help="default: web/public/data/replays/<scenario>.json")
     rec.add_argument("--mode", choices=["graph", "baseline"], default="graph")
     rec.set_defaults(fn=lambda a: __import__("rootpath.record", fromlist=["record"]).record(a.scenario, a.out, a.mode))
     t = sub.add_parser("call", help="call a tool directly (debugging)")

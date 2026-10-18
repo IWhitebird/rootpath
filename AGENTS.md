@@ -17,6 +17,11 @@ When the user reports an outage, errors, latency or an alert:
 6. `verify_recovery` on the alerting service; re-rank if it didn't recover. At most 3 actions.
 7. `notify_owner` (root-cause service), then `resolve_incident` with the root-cause change id.
 
+To map a new system into the graph (what `/rootpath:map` does in Claude Code): call `map_overview`
+first, then read compose files, Kubernetes manifests, CODEOWNERS, runbooks, flag definitions and git
+history, and write through `upsert_service`, `add_dependency` (always with `evidence`: file and key),
+`set_team`, `add_runbook`, `register_flag` and `record_change`. Never write an edge you can't point to.
+
 Before a risky change, use `get_blast_radius`, `get_owner` and `recent_changes` for a pre-change check.
 For postmortems, use `explain_incident`.
 

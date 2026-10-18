@@ -9,7 +9,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
-<link rel="stylesheet" href="site.css">
 </head>
 <body>
 <div class="wrap">
@@ -27,6 +26,7 @@
       <a href="#how">How it works</a>
       <a href="#evidence">Benchmark</a>
       <a href="#install">Install</a>
+      <a href="#deploy">Where it runs</a>
       <a href="#model">Graph model</a>
       <a id="repo-link" href="#install">Source</a>
     </nav>
@@ -67,17 +67,27 @@
             <div class="graph-area">
               <div id="graph"></div>
               <div class="caption" id="caption"><span class="chip">ready</span><span class="text">Loading the recording.</span></div>
+              <div class="offline" id="offline" role="status" hidden>
+                <div>
+                  <svg width="44" height="30" viewBox="0 0 44 30" aria-hidden="true">
+                    <circle cx="6" cy="15" r="4" fill="var(--idle)"/><circle cx="22" cy="7" r="4" fill="var(--idle)"/><circle cx="38" cy="21" r="4" fill="var(--bad)"/>
+                    <path d="M9.5 13.2 18.5 8.8" stroke="var(--idle)" stroke-width="1.6"/><path d="M25.5 9.3 28.8 11.6M31.4 13.4l3.1 2.2" stroke="var(--bad)" stroke-width="1.6" stroke-linecap="round"/>
+                  </svg>
+                  <b>Live graph offline: <span id="offline-error"></span></b>
+                  <p>Retrying every 5 s. The recorded incidents in the other tabs still play.</p>
+                </div>
+              </div>
             </div>
             <div class="legend" aria-hidden="true">
               <span><i style="background:var(--ok)"></i>service, coloured by live health</span>
               <span><i class="dia" style="background:var(--warn)"></i>deploy or flag change</span>
               <span><i style="background:var(--bad);opacity:.75"></i>incident</span>
-              <span><i class="sq" style="background:#8d6ad8"></i>team</span>
+              <span><i class="sq" style="background:var(--team)"></i>team</span>
               <span><i style="background:transparent;box-shadow:0 0 0 2px var(--path)"></i>looked at by the agent, in step order</span>
             </div>
           </div>
           <div class="side">
-            <div class="health"><h4>Live health · last 8s</h4><div id="health"></div></div>
+            <div class="health"><h4 id="health-title">Live health · last 8s</h4><div id="health"></div></div>
             <div class="steps"><h4>Agent steps</h4><div id="steps"><p class="empty">Waiting for the alert.</p></div></div>
           </div>
         </div>
@@ -86,6 +96,7 @@
             <div class="rail"></div><div class="fill" id="fill"></div>
             <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Scrub through the incident">
           </div>
+          <div class="live-status" id="live-status" hidden></div>
         </div>
         <details class="report" id="report">
           <summary><span>The agent's report</span><span class="meta" id="report-meta"></span></summary>
@@ -157,7 +168,7 @@
             <div class="tools"><span class="pill">notify_owner</span><span class="pill">resolve_incident</span><span class="pill">explain_incident</span></div></div>
 <pre class="code"><span class="k">MATCH</span> (t:Team)-[:OWNS]->(s:Service {name: <span class="s">$s</span>})
 <span class="k">OPTIONAL MATCH</span> (p:Person)-[:ON_CALL_FOR]->(t)
-<span class="k">OPTIONAL MATCH</span> (t)-[:ESCALATES_TO]->(e:Team)<-[:ON_CALL_FOR]-(ep:Person)
+<span class="k">OPTIONAL MATCH</span> (t)-[:ESCALATES_TO]->(e:Team)&lt;-[:ON_CALL_FOR]-(ep:Person)
 <span class="k">RETURN</span> t.name, p.handle, e.name, ep.handle
 
 (:Incident)-[:ROOT_CAUSE]->(:Change)-[:CHANGED]->(:Service)</pre>
@@ -189,6 +200,27 @@
         <div>
           <div class="snippet"><pre class="code" id="snippet"></pre><button class="copy" id="copy">Copy</button></div>
           <p class="snippet-note" id="snippet-note"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="deploy">
+    <div class="wrap">
+      <div class="eyebrow">Where it runs</div>
+      <h2 style="margin-top:10px">No Rootpath server. Your agent, your graph.</h2>
+      <div class="where">
+        <div class="finding key-f">
+          <b>On your machine</b>
+          <p>Claude Code starts the Rootpath MCP server as a local process when the plugin loads. <code>/rootpath:map</code> builds the graph from your repository and config; <code>rootpath ingest --watch</code> keeps health and deploys fresh if you want it continuous.</p>
+        </div>
+        <div class="finding key-f">
+          <b>Your FalkorDB</b>
+          <p>Bring your own: a local Docker container or a FalkorDB Cloud instance. The URL goes into the plugin's setup dialog and the system keychain. All state, from topology to incident memory, lives there.</p>
+        </div>
+        <div class="finding">
+          <b>Rootpath Cloud <span class="pill">coming soon</span></b>
+          <p>A hosted graph per workspace (one FalkorDB graph per tenant), a remote MCP endpoint and webhooks for deploys and alerts, so a team can start without running a database.</p>
         </div>
       </div>
     </div>
@@ -240,10 +272,6 @@
   </div>
 </footer>
 
-<script src="https://cdn.jsdelivr.net/npm/force-graph@1.47.4/dist/force-graph.min.js"></script>
-<script id="replays" type="application/json">/*__REPLAYS__*/</script>
-<script id="bench" type="application/json">/*__BENCH__*/</script>
-<script id="site-config" type="application/json">/*__CONFIG__*/</script>
-<script src="site.js"></script>
+<script type="module" src="/src/site/main.ts"></script>
 </body>
 </html>
