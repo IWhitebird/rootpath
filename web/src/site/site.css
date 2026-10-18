@@ -143,9 +143,17 @@ pre.code .k { color: var(--code-key); } pre.code .s { color: var(--code-str); } 
 .features p { margin-top: 8px; color: var(--muted); }
 
 /* ---------- results ---------- */
-.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 48px; margin-block: 36px 20px; }
-.stat b { display: block; font: 400 clamp(2rem, 4vw, 2.8rem)/1.05 var(--display); letter-spacing: -0.02em; }
-.stat span { display: block; margin-top: 6px; color: var(--muted); }
+.compare-wrap { margin-block: 32px 16px; max-width: 760px; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.compare { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.compare th, .compare td { padding: 14px 18px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: baseline; }
+.compare tbody tr:last-child th, .compare tbody tr:last-child td { border-bottom: 0; }
+.compare thead th { font: 600 0.72rem/1.2 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.compare tbody th { font-weight: 500; color: var(--muted); width: 38%; }
+.compare td { font: 500 1.05rem/1.3 var(--body); }
+.compare td small { display: block; margin-top: 2px; font-size: 0.8rem; font-weight: 400; color: var(--muted); }
+.compare .us { background: color-mix(in srgb, var(--path) 9%, transparent); }
+.compare thead .us { color: var(--ink); }
+.compare td.us { font-weight: 700; }
 
 /* ---------- get started ---------- */
 .start { list-style: none; margin: 32px 0 20px; padding: 0; counter-reset: step; display: grid; gap: 26px; max-width: 720px; }
@@ -164,9 +172,11 @@ pre.code .k { color: var(--code-key); } pre.code .s { color: var(--code-str); } 
   .stage { height: 440px; }
   .side { border-left: 0; border-top: 1px solid var(--line); }
   .steps { max-height: 320px; }
-  .features, .stats { grid-template-columns: minmax(0, 1fr); }
+  .features { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 560px) {
+  .compare th, .compare td { padding: 12px; }
+  .compare td { font-size: 0.95rem; }
   .top nav a:not(:last-child) { display: none; }
   .stage { height: 400px; }
   .player-bar .title span { display: none; }

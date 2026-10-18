@@ -2,7 +2,7 @@ import "./site.css";
 import { byId } from "../lib/html";
 import { getJson } from "../lib/http";
 import type { Bench, Replay } from "../lib/types";
-import { renderStats } from "./bench";
+import { renderComparison } from "./bench";
 import { Player } from "./replay";
 import { Stage } from "./stage";
 
@@ -31,7 +31,7 @@ for (const button of document.querySelectorAll<HTMLButtonElement>("[data-copy]")
   button.onclick = () => void copyText(button, source);
 }
 
-getJson<Bench>(`${DATA}bench.json`).then(renderStats, () => {
+getJson<Bench>(`${DATA}bench.json`).then(renderComparison, () => {
   byId("results").hidden = true;
 });
 
