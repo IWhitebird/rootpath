@@ -76,23 +76,27 @@ def write_report(results: list[dict]) -> None:
         if "tools" in r:
             r["diagnosis_calls"] = diagnosis_calls(r["tools"])
             r["logs_read"] = r["tools"][:r["diagnosis_calls"]].count("get_logs")
+        r["clean"] = bool(r.get("correct_action")) and not r.get("wrong_actions")
     lines = ["# Benchmark: graph tools vs baseline tools", "",
              "Same injected failure, same model (headless Claude Code), same remediation actions. "
              "**graph** = FalkorDB reasoning tools; **baseline** = health + logs + flat change log only.", "",
+             "*Correct fix* = the expected action on the expected target was taken. *Clean* = that, and no other "
+             "(wrong) remediation action.", "",
              "| scenario | mode | correct fix | wrong actions | calls to root cause | logs read | total calls | agent time | input tokens | cost |",
              "|---|---|---|---|---|---|---|---|---|---|"]
     for r in results:
         if "error" in r:
             lines.append(f"| {r['scenario']} | {r['mode']} | error: {r['error']} | | | | | | | |")
             continue
-        lines.append(f"| {r['scenario']} | {r['mode']} | {'✅' if r['fixed'] else '❌'} | {', '.join(r['wrong_actions']) or '-'} | "
+        lines.append(f"| {r['scenario']} | {r['mode']} | {'✅' if r['correct_action'] else '❌'} | {', '.join(r['wrong_actions']) or '-'} | "
                      f"{r['diagnosis_calls']} | {r['logs_read']} | {r['tool_calls']} | {r['agent_s']}s | {r['input_tokens']:,} | ${(r['cost_usd'] or 0):.3f} |")
-    lines += ["", "## Totals", "", "| mode | correct fix | calls to root cause | logs read | total calls | agent time | input tokens | cost |",
-              "|---|---|---|---|---|---|---|---|"]
+    lines += ["", "## Totals", "", "| mode | correct fix | clean fix | calls to root cause | logs read | total calls | agent time | input tokens | cost |",
+              "|---|---|---|---|---|---|---|---|---|"]
     for mode in ("graph", "baseline"):
         rs = [r for r in results if r.get("mode") == mode and "error" not in r]
         if rs:
-            lines.append(f"| {mode} | {sum(r['fixed'] for r in rs)}/{len(rs)} | {sum(r['diagnosis_calls'] for r in rs)} | "
+            lines.append(f"| {mode} | {sum(r['correct_action'] for r in rs)}/{len(rs)} | {sum(r['clean'] for r in rs)}/{len(rs)} | "
+                         f"{sum(r['diagnosis_calls'] for r in rs)} | "
                          f"{sum(r['logs_read'] for r in rs)} | {sum(r['tool_calls'] for r in rs)} | "
                          f"{sum(r['agent_s'] for r in rs):.0f}s | {sum(r['input_tokens'] for r in rs):,} | "
                          f"${sum((r['cost_usd'] or 0) for r in rs):.2f} |")

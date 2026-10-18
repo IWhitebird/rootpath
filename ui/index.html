@@ -69,15 +69,16 @@ header { display: flex; align-items: center; gap: 14px; padding: 10px 16px; bord
 .busy { color: var(--warn); font-family: var(--mono); font-size: 12px; }
 
 main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 0; }
-.stage { position: relative; min-width: 0; background: radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--ink) 8%, transparent) 1px, transparent 0) 0 0 / 22px 22px; }
+.stage { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; }
+.graph-area { position: relative; min-height: 0; background: radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--ink) 8%, transparent) 1px, transparent 0) 0 0 / 22px 22px; }
 #graph { position: absolute; inset: 0; }
 .caption { position: absolute; left: 14px; right: 14px; top: 12px; z-index: 4; display: flex; gap: 10px; align-items: flex-start; pointer-events: none; }
-.chip { flex: none; white-space: nowrap; font: 700 0.7rem/1 var(--mono); padding: 6px 8px; border-radius: 6px; background: var(--surface-2); color: var(--ink); text-transform: uppercase; letter-spacing: .05em; border: 1px solid var(--line); }
+.chip { flex: none; display: inline-block; min-width: max-content; white-space: nowrap; font: 700 0.7rem/1 var(--mono); padding: 6px 9px; border-radius: 6px; background: var(--surface-2); color: var(--ink); text-transform: uppercase; letter-spacing: .05em; border: 1px solid var(--line); }
 .chip.step { background: var(--path); color: var(--path-ink); border-color: var(--path); }
 .chip.alert { background: var(--bad); color: #fff; border-color: var(--bad); }
 .chip.ok { background: var(--ok); color: #fff; border-color: var(--ok); }
 .caption .text { background: color-mix(in srgb, var(--surface) 88%, transparent); padding: 4px 8px; border-radius: 6px; max-width: 80ch; }
-.legend { position: absolute; left: 14px; bottom: 12px; z-index: 4; display: flex; flex-wrap: wrap; gap: 2px 4px; background: color-mix(in srgb, var(--surface) 90%, transparent); padding: 6px; border-radius: 8px; border: 1px solid var(--line); }
+.legend { display: flex; flex-wrap: wrap; gap: 2px 4px; background: var(--surface); padding: 6px 10px; border-top: 1px solid var(--line); }
 .legend label { display: inline-flex; align-items: center; gap: 6px; padding: 3px 7px; border-radius: 5px; cursor: pointer; font: 400 0.72rem/1.2 var(--mono); color: var(--muted); }
 .legend label:has(input:checked) { color: var(--ink); background: var(--surface-2); }
 .legend input { position: absolute; opacity: 0; pointer-events: none; }
@@ -169,10 +170,12 @@ aside h4 { margin: 0 0 8px; font: 600 0.68rem/1 var(--mono); letter-spacing: .09
   </div>
   <main>
     <div class="stage">
-      <div id="graph"></div>
-      <div class="caption" id="caption"><span class="chip">idle</span><span class="text">Break something, then run the agent.</span></div>
+      <div class="graph-area">
+        <div id="graph"></div>
+        <div class="caption" id="caption"><span class="chip">idle</span><span class="text">Break something, then run the agent.</span></div>
+        <div class="detail" id="detail" hidden></div>
+      </div>
       <div class="legend" id="legend"></div>
-      <div class="detail" id="detail" hidden></div>
     </div>
     <aside>
       <div class="health"><h4>Live health · last 10s</h4><div id="health"></div></div>

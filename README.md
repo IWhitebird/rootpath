@@ -7,10 +7,16 @@ on its own when an alert fires.
 > Graph Hacks: Context for AI Agents (WeMakeDevs × FalkorDB, Oct 2026)
 > **Tracks:** 01 Agents That Act on Connected Data (primary) · 02 Agent Memory and Coordination
 
-**Website with in-browser replays of real incidents:** `site/index.html` (published to GitHub Pages
-by `.github/workflows/pages.yml`; open it locally with no server needed).
+![A recorded incident: the agent follows the graph from the alerting frontend three hops down to a feature flag, turns it off, verifies and remembers](docs/replay.gif)
 
-![On-Call Graph console](docs/screenshot.png)
+*A real recorded run, replayed by the project website: fraud-check gets slow after a flag flip,
+frontend alerts, and the agent follows the graph three hops down. It rules out a coincidental
+deploy, recalls the matching past incident, turns the flag off, verifies recovery, pages the owner
+and stores the incident. The website is [`site/index.html`](site/index.html): self-contained, it runs
+from disk and is published to GitHub Pages by `.github/workflows/pages.yml`.
+[`docs/replay.mp4`](docs/replay.mp4) is the same clip as video.*
+
+![The operator console mid-incident](docs/screenshot.png)
 
 ## The problem
 
@@ -168,40 +174,45 @@ Use `--autonomy propose` for dry-run-only recommendations.
 ## Does the graph matter? (benchmark)
 
 `uv run oncall-graph bench` injects each failure into the live stack and runs the same headless
-agent (Claude Opus 5.5) twice. Both runs have the same remediation actions. **graph** gets the
-FalkorDB reasoning and memory tools. **baseline** gets what a plain observability stack gives you:
-health, logs and a flat change log. We ran it with full telemetry (stats include where errors
-originate, like distributed tracing) and with basic telemetry (`ONCALL_TELEMETRY=basic`: error rate
-and latency only).
+agent (Claude Opus 5.5 through Claude Code) twice, with the same remediation actions both times:
 
-| telemetry | mode | correct fix | logs read before the fix | total tool calls | agent time | cost |
+- **graph** gets the FalkorDB reasoning and memory tools.
+- **baseline** gets what a plain observability stack gives you: health, logs and a flat change log.
+
+Each of the 6 scenarios runs twice per mode at two telemetry levels: **with tracing** (stats say where
+errors originate) and **without** (`ONCALL_TELEMETRY=basic`: error rate and latency only). That's 48
+runs on the final code.
+
+| telemetry | mode | clean fix¹ | logs read before the fix | calls to root cause | agent time | cost |
 |---|---|---|---|---|---|---|
-| full | graph | 6/6 | 6 | 65 | 297s | $0.86 |
-| full | baseline | 6/6 | 10 | 46 | 285s | $0.66 |
-| basic (no tracing) | graph | **6/6** | **7** | 66 | 315s | $0.91 |
-| basic (no tracing) | baseline | **5/6** | 15 | 46 | 243s | $0.62 |
+| with tracing | graph | **12/12** | **12** | 48 | **519 s** | $1.68 |
+| with tracing | baseline | 11/12 | 21 | 46 | 687 s | $1.55 |
+| without tracing | graph | **12/12** | **12** | **48** | **532 s** | **$1.62** |
+| without tracing | baseline | 12/12 | 42 | 68 | 675 s | $1.80 |
 
-Per-scenario tables and tool sequences: [`bench/RESULTS-full.md`](bench/RESULTS-full.md) and
-[`bench/RESULTS-basic.md`](bench/RESULTS-basic.md). This is one run per cell, so the numbers are
-directional, not statistically significant.
+¹ The expected action on the expected target (roll back payment, flag off, restart inventory), and no
+other remediation action. Per-scenario tables and every tool sequence:
+[`bench/RESULTS-full.md`](bench/RESULTS-full.md), [`bench/RESULTS-basic.md`](bench/RESULTS-basic.md).
 
 **What we learned:**
 
-- **A frontier model with good telemetry on a 7-service system finds the root cause without a graph.**
-  We didn't expect baseline to fail on the easy scenarios, and it didn't.
-- **The graph roughly halves the logs the agent reads** (6 vs 10; 7 vs 15). `rank_suspects` sends it
-  straight to the service where the failure starts, instead of walking the logs hop by hop.
-- **The one wrong call happened exactly where graph context matters.** `pool-after-deploy`: inventory's
-  DB pool is exhausted 14 minutes after a healthy inventory release. Without tracing, baseline blamed the
-  release and **rolled back a good version**. The system recovered by side effect (recreating the
-  container cleared the pool), but the diagnosis was wrong and the leak will come back. The graph agent
-  pulled INC-019 and runbook RB-INV-01 from the graph, restarted instead, and wrote down why it ignored
-  the recent deploy.
-- **The graph agent costs about 40% more per incident.** Its tool results are larger, it has more tools,
-  and it does work baseline has no way to do: open and resolve the incident, page the right on-call
-  person, write the root cause into memory, and record provenance for every action.
-- Next steps: bigger topologies (a flat change list and hop-by-hop log reading grow with the org;
-  `rank_suspects` doesn't), and repeated runs for confidence intervals.
+- **A frontier model with good telemetry usually finds the cause without a graph.** Baseline took the
+  right action in all 24 runs. On a 7-service system the answer is often readable from the health table.
+- **The graph sends the agent straight to where the failure starts.** It read 24 service logs before
+  fixing, against 63 for baseline (62% fewer). Without tracing the gap widens to 12 vs 42, because
+  baseline has to walk the call chain one log at a time.
+- **That makes it faster, and without tracing cheaper.** Agent time was 1051 s vs 1362 s in total.
+  Cost was $3.30 vs $3.35, even though the graph agent also opens and resolves the incident, pages
+  the owner and writes memory.
+- **Wrong actions come from coincidences.** In one flag-collision run, baseline first rolled back the
+  healthy fraud-check release that happened to land minutes before the flag flip. That fixed nothing
+  and cost 4 minutes before it found the flag. The graph agent made no wrong actions in 24 runs.
+- **What changed between versions, honestly.** The first version of `rank_suspects` pointed at the
+  right service but didn't pass along what the graph knew about it. In that run the graph agent
+  itself once rolled back a healthy inventory release (the `pool-after-deploy` trap) without reading
+  the runbook. `rank_suspects` now returns the top suspect's runbooks and past incidents with the
+  ranking. The v1 results are kept in [`bench/archive/`](bench/archive/).
+- **Caveat:** 2 runs per cell is a small sample, so read these as directional.
 
 ## Website and incident replays
 

@@ -22,6 +22,7 @@ def bench(telemetry: str) -> list[dict]:
         tools = r.get("tools", [])
         r["diagnosis_calls"] = next((i for i, t in enumerate(tools) if t in ACTIONS), len(tools))
         r["logs_read"] = tools[:r["diagnosis_calls"]].count("get_logs")
+        r["clean"] = bool(r.get("correct_action")) and not r.get("wrong_actions")
         r.pop("tools", None)
     return rows
 

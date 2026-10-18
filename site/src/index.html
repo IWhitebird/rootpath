@@ -102,17 +102,18 @@ p { margin: 0; }
 .icon-btn:hover { border-color: var(--accent); }
 .speed { font: 600 0.75rem/1 var(--mono); padding: 0 10px; width: auto; }
 .console-body { display: grid; grid-template-columns: minmax(0, 1fr) 340px; height: 560px; }
-.stage { position: relative; min-width: 0; background:
+.stage { min-width: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; }
+.graph-area { position: relative; min-height: 0; background:
   radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--ink) 9%, transparent) 1px, transparent 0) 0 0 / 22px 22px; }
 #graph { position: absolute; inset: 0; }
 .caption { position: absolute; left: 14px; right: 14px; top: 12px; z-index: 3; display: flex; gap: 10px; align-items: flex-start; pointer-events: none; }
-.caption .chip { flex: none; white-space: nowrap; font: 700 0.72rem/1 var(--mono); padding: 6px 8px; border-radius: 6px; background: var(--ink); color: var(--bg); letter-spacing: 0.04em; text-transform: uppercase; }
+.caption .chip { flex: none; display: inline-block; min-width: max-content; white-space: nowrap; font: 700 0.72rem/1 var(--mono); padding: 6px 8px; border-radius: 6px; background: var(--ink); color: var(--bg); letter-spacing: 0.04em; text-transform: uppercase; }
 .caption .chip.alert { background: var(--bad); color: #fff; }
 .caption .chip.step { background: var(--path); color: var(--path-ink); }
 .caption .chip.ok { background: var(--ok); color: #fff; }
 .caption .text { font: 500 var(--step-0)/1.45 var(--body); background: color-mix(in srgb, var(--surface) 88%, transparent); padding: 4px 8px; border-radius: 6px; max-width: 70ch; }
 .caption .text code { font-size: 0.82rem; }
-.legend { position: absolute; left: 14px; bottom: 12px; z-index: 3; display: flex; flex-wrap: wrap; gap: 4px 14px; font: 400 0.72rem/1.4 var(--mono); color: var(--muted); background: color-mix(in srgb, var(--surface) 85%, transparent); padding: 6px 8px; border-radius: 6px; max-width: calc(100% - 28px); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font: 400 0.72rem/1.4 var(--mono); color: var(--muted); padding: 8px 14px; border-top: 1px solid var(--line); background: var(--surface); }
 .legend i { display: inline-block; width: 9px; height: 9px; margin-right: 5px; vertical-align: -1px; border-radius: 50%; }
 .legend i.sq { border-radius: 2px; } .legend i.dia { border-radius: 1px; transform: rotate(45deg) scale(.85); }
 .side { border-left: 1px solid var(--line); display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; }
@@ -221,7 +222,7 @@ footer { border-top: 1px solid var(--line); padding-block: 36px 48px; color: var
 @media (max-width: 980px) {
   .hero-head, .bench-grid, .install, .model, .foot { grid-template-columns: minmax(0, 1fr); }
   .console-body { grid-template-columns: minmax(0, 1fr); height: auto; }
-  .stage { height: 420px; }
+  .stage { height: 460px; }
   .side { border-left: 0; border-top: 1px solid var(--line); max-height: none; }
   .steps { max-height: 340px; }
   .stage-row { grid-template-columns: 44px minmax(0, 1fr); }
@@ -229,7 +230,7 @@ footer { border-top: 1px solid var(--line); padding-block: 36px 48px; color: var
   .stage-row .idx { font-size: 1.8rem; }
 }
 @media (max-width: 560px) {
-  .stage { height: 360px; }
+  .stage { height: 420px; }
   .bar-row { grid-template-columns: 112px minmax(0, 1fr) 56px; font-size: 0.78rem; }
   .console-bar { gap: 8px; }
   .tab small { display: none; }
@@ -293,8 +294,10 @@ footer { border-top: 1px solid var(--line); padding-block: 36px 48px; color: var
         </div>
         <div class="console-body">
           <div class="stage">
-            <div id="graph"></div>
-            <div class="caption" id="caption"><span class="chip">ready</span><span class="text">Loading the recording.</span></div>
+            <div class="graph-area">
+              <div id="graph"></div>
+              <div class="caption" id="caption"><span class="chip">ready</span><span class="text">Loading the recording.</span></div>
+            </div>
             <div class="legend" aria-hidden="true">
               <span><i style="background:var(--ok)"></i>service, coloured by live health</span>
               <span><i class="dia" style="background:var(--warn)"></i>deploy or flag change</span>
@@ -752,7 +755,8 @@ document.getElementById('facts').innerHTML = [
 function totals(rows) {
   const ok = rows.filter(r => !r.error);
   const sum = k => ok.reduce((a, r) => a + (r[k] || 0), 0);
-  return { n: ok.length, fixed: ok.filter(r => r.correct_action ?? r.fixed).length, logs: sum('logs_read'), calls: sum('tool_calls'),
+  return { n: ok.length, fixed: ok.filter(r => r.correct_action ?? r.fixed).length, clean: ok.filter(r => r.clean).length,
+           wrong: ok.reduce((a, r) => a + (r.wrong_actions || []).length, 0), logs: sum('logs_read'), calls: sum('tool_calls'),
            diag: sum('diagnosis_calls'), cost: sum('cost_usd'), time: sum('agent_s') };
 }
 function benchSection() {
@@ -771,28 +775,41 @@ function benchSection() {
   const per = k => T[k].graph.n;
   document.getElementById('bars').innerHTML =
     `<div class="key"><span><i style="background:var(--ink)"></i>graph tools</span><span><i style="background:var(--idle)"></i>baseline tools</span></div>` +
-    metric('Correct fixes', 'fixed', v => v, ` / ${per(tel[0][0])}`) +
+    metric('Clean fixes: the right action and nothing else', 'clean', v => v, ` / ${per(tel[0][0])}`) +
     metric('Service logs read before the fix', 'logs', v => v, '') +
+    metric('Agent time, all runs', 'time', v => Math.round(v), ' s') +
     metric('Cost of all runs', 'cost', v => '$' + v.toFixed(2), '');
   const f = [];
   const full = T.full, basic = T.basic;
-  if (full) f.push(['', 'With tracing, a frontier model finds the cause either way.', `${full.graph.fixed === full.graph.n && full.baseline.fixed === full.baseline.n ? `Both modes got the fix right in all ${full.graph.n} runs.` : `Graph ${full.graph.fixed} of ${full.graph.n}, baseline ${full.baseline.fixed} of ${full.baseline.n}.`} When every service reports where its errors originate, the answer is close to the health table.`]);
-  if (full && basic) f.push(['key-f', 'The graph sends the agent to where the failure starts.', `It read ${full.graph.logs + basic.graph.logs} service logs before fixing, against ${full.baseline.logs + basic.baseline.logs} for baseline, because the traversal names the origin instead of walking the call chain one hop at a time.`]);
-  if (basic) f.push(['key-f', 'Context decides the hard cases.', `Without tracing, baseline made ${basic.baseline.n - basic.baseline.fixed} wrong call${basic.baseline.n - basic.baseline.fixed === 1 ? '' : 's'} out of ${basic.baseline.n}, the graph agent ${basic.graph.n - basic.graph.fixed}. The typical miss: inventory runs out of DB connections right after a healthy inventory release, and baseline rolls the good release back. The graph agent reads the runbook and the past incident on that node, and restarts.`]);
-  if (full) f.push(['', 'It costs more per incident.', `About ${Math.round(100 * (full.graph.cost / full.baseline.cost - 1))}% more with tracing. Part of that is work the baseline cannot do: open and resolve the incident, page the on-call owner, record why each action was taken.`]);
+  const all = tel.flatMap(([k]) => BENCH[k].filter(r => !r.error));
+  const sumOf = (mode, key) => tel.reduce((a, [k]) => a + T[k][mode][key], 0);
+  const wrongList = mode => all.filter(r => r.mode === mode && (r.wrong_actions || []).length)
+    .map(r => `${r.wrong_actions.join(', ')} during ${r.scenario}`);
+  if (full) f.push(['', 'With tracing, a frontier model finds the cause either way.',
+    `${full.graph.fixed === full.graph.n && full.baseline.fixed === full.baseline.n ? `Both modes took the right action in all ${full.graph.n} runs.` : `Right action: graph ${full.graph.fixed} of ${full.graph.n}, baseline ${full.baseline.fixed} of ${full.baseline.n}.`} When every service reports where its errors originate, the answer is close to the health table.`]);
+  f.push(['key-f', 'The graph sends the agent to where the failure starts.',
+    `Across all runs it read ${sumOf('graph', 'logs')} service logs before fixing, against ${sumOf('baseline', 'logs')} for baseline. The traversal names the origin instead of walking the call chain one hop at a time.`]);
+  const gw = wrongList('graph'), bw = wrongList('baseline');
+  f.push(['key-f', 'Wrong actions happen on coincidences.',
+    (bw.length ? `Baseline took ${bw.length} wrong remediation action${bw.length > 1 ? 's' : ''} (${bw.join('; ')}).` : 'Baseline took no wrong actions.') + ' ' +
+    (gw.length ? `The graph agent took ${gw.length} (${gw.join('; ')}).` : 'The graph agent took none.') +
+    ' The trap is a healthy release that happens to land on the failing service. The graph hands the agent that service\'s runbook and past incidents with the ranking, and they say what actually fixes this failure.']);
+  const gc = sumOf('graph', 'cost'), bc = sumOf('baseline', 'cost'), gt = sumOf('graph', 'time'), bt = sumOf('baseline', 'time');
+  f.push(['', gc > bc ? 'It costs a little more per incident.' : 'It costs no more per incident.',
+    `All graph runs cost $${gc.toFixed(2)} against $${bc.toFixed(2)} for baseline, and took ${Math.round(gt)} s of agent time against ${Math.round(bt)} s. The graph runs include work baseline cannot do: opening and resolving the incident, paging the on-call owner, recording why each action was taken.`]);
   document.getElementById('findings').innerHTML = f.map(([c, b, p]) => `<div class="finding ${c}"><b>${b}</b><p>${p}</p></div>`).join('');
   const scen = [...new Set(tel.flatMap(([k]) => BENCH[k].map(r => r.scenario)))];
   const cell = (k, s, m) => {
     const rs = BENCH[k].filter(r => r.scenario === s && r.mode === m && !r.error);
     if (!rs.length) return '<td>–</td>';
-    const ok = rs.filter(r => r.correct_action ?? r.fixed).length;
+    const ok = rs.filter(r => r.clean).length;
     return `<td class="${ok === rs.length ? 'hit' : 'miss'}">${ok}/${rs.length}</td>`;
   };
   document.getElementById('bench-table').innerHTML =
     `<thead><tr><th>Scenario</th>${tel.map(([, l]) => `<th>${l}: graph</th><th>${l}: baseline</th>`).join('')}</tr></thead><tbody>` +
     scen.map(s => `<tr><td class="mono">${s}</td>${tel.map(([k]) => cell(k, s, 'graph') + cell(k, s, 'baseline')).join('')}</tr>`).join('') + '</tbody>';
   const runs = tel.reduce((a, [k]) => a + BENCH[k].length, 0);
-  document.getElementById('bench-note').textContent = `Correct fix = the expected action on the expected target (rollback payment, flag off, restart inventory). ${runs} runs in total, model Claude Opus 5.5 through Claude Code headless. Small samples: read these as directional.`;
+  document.getElementById('bench-note').textContent = `Clean fix = the expected action on the expected target (rollback payment, flag off, restart inventory) and no other remediation action. ${runs} runs in total, model Claude Opus 5.5 through Claude Code headless. Small samples: read these as directional.`;
 }
 benchSection();
 

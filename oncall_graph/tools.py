@@ -235,7 +235,7 @@ def rank_suspects(symptom_service: str, window_minutes: int = 60) -> dict:
     top = suspects[0]
     path = _path(symptom_service, top["service"])["path"] if top["service"] != symptom_service else [symptom_service]
 
-    touched = [("Service", symptom_service)] + [("Service", s["service"]) for s in suspects[:3]]
+    touched = [("Service", n) for n in path] + [("Service", s["service"]) for s in suspects[:3]]
     touched += [("Change", ch["id"]) for s in suspects[:2] for ch in s["_changes"]]
     for s in suspects:
         del s["_changes"]
