@@ -79,6 +79,82 @@ flowchart LR
 
 ![The Rootpath console mid-incident](docs/screenshot.png)
 
+## Graph data model
+
+```
+(:Team)-[:OWNS]->(:Service)-[:CALLS {declared, optional, observed}]->(:Service)
+(:Person)-[:ON_CALL_FOR]->(:Team)-[:ESCALATES_TO]->(:Team)
+(:Runbook)-[:FOR]->(:Service)
+(:Team)-[:OWNS]->(:Flag)-[:AFFECTS]->(:Service)
+
+(:Change:Deploy {version, prev_version, at})-[:CHANGED]->(:Service)
+(:Change:FlagChange {flag, from, to, at})-[:TOGGLED]->(:Flag)
+(:Person)-[:AUTHORED]->(:Change)      (:Deploy)-[:ROLLED_BACK]->(:Deploy)
+
+(:Incident)-[:IMPACTED]->(:Service)
+(:Incident)-[:ROOT_CAUSE]->(:Change | :Service)
+(:Incident)-[:RESOLVED_BY]->(:Action)-[:BECAUSE]->(:Evidence)
+(:Action)-[:REVERTS]->(:Change)
+
+(:Investigation)-[:FOR]->(:Incident)
+(:Investigation)-[:STEP {n, tool, at}]->(any node the agent looked at)
+```
+
+## Key Cypher
+
+Every service that could be causing the alert:
+
+```cypher
+MATCH p = (s:Service {name: $s})-[:CALLS*0..6]->(d:Service)
+RETURN d.name AS service, min(length(p)) AS hops
+```
+
+Flag changes that reach those services, though nothing was deployed there:
+
+```cypher
+MATCH (x:FlagChange)-[:TOGGLED]->(f:Flag)-[:AFFECTS]->(d:Service)
+WHERE d.name IN $names AND x.at >= $since
+RETURN d.name, x
+```
+
+Tie-breaking and the evidence path:
+
+```cypher
+CALL algo.betweenness({nodeLabels: ['Service'], relationshipTypes: ['CALLS']}) YIELD node, score
+
+MATCH (a:Service {name: $a}), (b:Service {name: $b})
+CALL algo.SPpaths({sourceNode: a, targetNode: b, relTypes: ['CALLS'], pathCount: 1}) YIELD path
+```
+
+Incident memory, a full-text index plus the graph:
+
+```cypher
+CALL db.idx.fulltext.queryNodes('Incident', $q) YIELD node, score RETURN node.id AS id, score
+
+MATCH (i:Incident)-[:IMPACTED|ROOT_CAUSE]->(s:Service {name: $s}) RETURN DISTINCT i.id AS id
+
+MATCH (i:Incident) WHERE i.id IN $ids AND i.status = 'resolved'
+OPTIONAL MATCH (i)-[:ROOT_CAUSE]->(rc)
+OPTIONAL MATCH (i)-[:RESOLVED_BY]->(a:Action)
+RETURN i.id, collect(DISTINCT rc), collect(DISTINCT a)
+```
+
+Who to page:
+
+```cypher
+MATCH (t:Team)-[:OWNS]->(s:Service {name: $s})
+OPTIONAL MATCH (p:Person)-[:ON_CALL_FOR]->(t)
+OPTIONAL MATCH (t)-[:ESCALATES_TO]->(e:Team)
+OPTIONAL MATCH (ep:Person)-[:ON_CALL_FOR]->(e)
+RETURN t.name, p.handle, e.name, ep.handle
+```
+
+The safety hook, itself a query: no real action without a dry run.
+
+```cypher
+MATCH (a:Action {kind: $kind, target: $target, dry_run: true}) WHERE a.at >= $since RETURN count(a)
+```
+
 ## Benchmark
 
 The same agent (Claude Opus 5.5, headless) and the same remediation tools on six injected failures,
