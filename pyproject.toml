@@ -1,7 +1,7 @@
 [project]
 name = "rootpath"
 version = "0.1.0"
-description = "Graph-powered on-call agent: an MCP server + Claude Code plugin that diagnoses, fixes and remembers incidents using FalkorDB."
+description = "An incident agent that reasons over a FalkorDB graph of your services, changes, owners and past incidents."
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 license = "Apache-2.0"

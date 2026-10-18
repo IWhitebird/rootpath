@@ -179,7 +179,7 @@ export class Player {
     if (ev?.kind === "alert") {
       chip = "paged";
       kind = "alert";
-      text = `${esc(ev.text)}. The headless agent starts with only the oncall tools.`;
+      text = `${esc(ev.text)}. A headless agent starts with only the Rootpath tools.`;
     }
     if (last && (ev?.kind !== "done" || last.t > ev.t)) {
       chip = `step ${last.n}`;
@@ -189,7 +189,7 @@ export class Player {
     if (ev?.kind === "done" && (!last || ev.t >= last.t)) {
       chip = "resolved";
       kind = "ok";
-      text = `Fixed and verified in ${rec.agent.duration_s.toFixed(0)} s with ${rec.agent.tool_calls} tool calls. The incident and its root cause are now memory.`;
+      text = `Fixed and verified in ${rec.agent.duration_s.toFixed(0)} s with ${rec.agent.tool_calls} tool calls. The incident is stored with its root cause.`;
     }
     this.stage.caption(chip, kind, text);
   }

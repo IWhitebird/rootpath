@@ -8,7 +8,6 @@ import { LiveView } from "./live";
 import { Player, prepare, RECORDINGS, type Recording, type Tab } from "./replay";
 import { Stage } from "./stage";
 
-const REPO = "https://github.com/IWhitebird/rootpath";
 const DATA = `${import.meta.env.BASE_URL}data/`;
 const LIVE: Tab = { key: "live", title: "Live · FalkorDB Cloud", sub: "the real graph, right now" };
 
@@ -20,21 +19,8 @@ async function loadRecordings(): Promise<Recording[]> {
   return loaded.filter((r) => r !== null);
 }
 
-function renderFacts(recordings: Recording[]): void {
-  const durations = recordings.map((r) => r.agent.duration_s);
-  const runs = recordings.length
-    ? [`<span>Recorded agent runs: <b>${recordings.length}</b>, fixed and verified in <b>${Math.min(...durations).toFixed(0)}–${Math.max(...durations).toFixed(0)} s</b> each</span>`]
-    : [];
-  byId("facts").innerHTML = [
-    ...runs,
-    "<span>Tools: <b>24</b> over MCP, <b>3</b> of them change infrastructure</span>",
-    "<span>Hosts: <b>Claude Code</b> (plugin), <b>Codex</b>, <b>Cursor</b>, headless</span>",
-  ].join("");
-}
-
 async function startConsole(): Promise<void> {
   const recordings = await loadRecordings();
-  renderFacts(recordings);
   const stage = new Stage();
   const player = new Player(stage, recordings);
   const live = new LiveView(stage);
@@ -73,7 +59,7 @@ async function startConsole(): Promise<void> {
   if (speed) player.setSpeed(Number(speed) || 2);
 }
 
-renderInstall(REPO);
+renderInstall();
 getJson<Bench>(`${DATA}bench.json`).then(renderBench, () => {
   byId("evidence").hidden = true;
 });

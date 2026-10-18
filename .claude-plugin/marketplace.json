@@ -1,6 +1,6 @@
 {
   "name": "rootpath",
-  "description": "On-call incident agent tools for Claude Code: FalkorDB graph reasoning, safe remediation, incident memory.",
+  "description": "Rootpath for Claude Code.",
   "owner": {
     "name": "Shreyas Patange",
     "url": "https://github.com/IWhitebird"
@@ -9,7 +9,7 @@
     {
       "name": "rootpath",
       "source": "./",
-      "description": "Graph-powered on-call agent (FalkorDB + MCP): /oncall, /blast-radius, /postmortem"
+      "description": "An incident agent that reasons over a FalkorDB graph of your services, changes, owners and past incidents."
     }
   ]
 }

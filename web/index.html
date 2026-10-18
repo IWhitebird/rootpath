@@ -4,8 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Rootpath</title>
-<meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="An incident agent that reasons over a FalkorDB graph of services, changes, owners and past incidents. It finds where a failure starts, fixes it, verifies the fix and remembers.">
+<meta name="description" content="An incident agent that reasons over a FalkorDB graph of your services, deploys, flags, owners and past incidents.">
+<meta property="og:title" content="Rootpath">
+<meta property="og:description" content="The alert is never where the bug is. An incident agent that reasons over a FalkorDB graph.">
+<meta property="og:image" content="https://rootpath.iwhitebird.com/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/src/icons/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/src/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400&display=swap">
@@ -26,9 +31,7 @@
       <a href="#how">How it works</a>
       <a href="#evidence">Benchmark</a>
       <a href="#install">Install</a>
-      <a href="#deploy">Where it runs</a>
-      <a href="#model">Graph model</a>
-      <a id="repo-link" href="#install">Source</a>
+      <a href="https://github.com/IWhitebird/rootpath">GitHub</a>
     </nav>
   </header>
 </div>
@@ -37,15 +40,12 @@
   <section class="hero">
     <div class="wrap">
       <div class="hero-head">
-        <div>
-          <div class="eyebrow">Graph Hacks 2026 · FalkorDB × WeMakeDevs · Track 01 + 02</div>
-          <h1>The alert is never where <span class="hl">the bug is.</span></h1>
-        </div>
+        <h1>The alert is never where <span class="hl">the bug is.</span></h1>
         <div class="hero-copy">
-          <p>Rootpath gives an AI agent a FalkorDB graph of your services, deploys, feature flags, owners and past incidents. It follows the failure to where it starts, fixes it, checks the fix, and remembers what happened.</p>
+          <p>Rootpath gives your AI agent a FalkorDB graph of your services, deploys, feature flags, owners and past incidents. It follows a failure to where it starts, fixes it, checks the fix, and remembers.</p>
           <div class="cta">
-            <a class="btn primary" href="#install">Install Rootpath</a>
-            <a class="btn" href="#how">How it reasons</a>
+            <a class="btn primary" href="#install">Install</a>
+            <a class="btn" href="https://github.com/IWhitebird/rootpath">GitHub</a>
           </div>
         </div>
       </div>
@@ -74,16 +74,16 @@
                     <path d="M9.5 13.2 18.5 8.8" stroke="var(--idle)" stroke-width="1.6"/><path d="M25.5 9.3 28.8 11.6M31.4 13.4l3.1 2.2" stroke="var(--bad)" stroke-width="1.6" stroke-linecap="round"/>
                   </svg>
                   <b>Live graph offline: <span id="offline-error"></span></b>
-                  <p>Retrying every 5 s. The recorded incidents in the other tabs still play.</p>
+                  <p>Retrying every 5 s. The recorded incidents still play.</p>
                 </div>
               </div>
             </div>
             <div class="legend" aria-hidden="true">
-              <span><i style="background:var(--ok)"></i>service, coloured by live health</span>
+              <span><i style="background:var(--ok)"></i>service</span>
               <span><i class="dia" style="background:var(--warn)"></i>deploy or flag change</span>
-              <span><i style="background:var(--bad);opacity:.75"></i>incident</span>
-              <span><i class="sq" style="background:var(--team)"></i>team</span>
-              <span><i style="background:transparent;box-shadow:0 0 0 2px var(--path)"></i>looked at by the agent, in step order</span>
+              <span><i class="dia" style="background:var(--accent)"></i>flag</span>
+              <span><i style="background:var(--bad);opacity:.75"></i>past incident</span>
+              <span><i style="background:transparent;box-shadow:0 0 0 2px var(--path)"></i>read by the agent</span>
             </div>
           </div>
           <div class="side">
@@ -103,34 +103,31 @@
           <div class="md" id="report-body"></div>
         </details>
       </div>
-      <div class="facts" id="facts"></div>
+      <p class="small replay-note">Recordings of real runs against the demo stack. The Live tab reads the graph on FalkorDB Cloud.</p>
     </div>
   </section>
 
   <section class="band" id="how">
     <div class="wrap">
-      <div class="eyebrow">What happens when the pager goes off</div>
-      <h2 style="margin-top:10px">Five steps, each one a graph query</h2>
-      <p class="lede" style="margin-top:14px">The service that alerts is rarely the one that is broken. A deploy only matters if it sits on the failing path, and a feature flag reaches services it was never deployed to. These are questions about how things connect, so the agent asks the graph.</p>
+      <h2>How it works</h2>
+      <p class="lede">The service that alerts is rarely the one that is broken, and a deploy only matters if it is on the failing path. Each step is a graph query.</p>
       <div class="method">
         <div class="stage-row">
           <div class="idx">1</div>
-          <div><h3>Locate where the failure starts</h3>
-            <p>Walk downstream from the alerting service. Every possible cause is in that set and nothing else is. The deepest unhealthy service whose own dependencies are healthy is where the failure starts; everything above it is passing the error along. Changes outside the set are ruled out by name.</p>
-            <div class="tools"><span class="pill">rank_suspects</span><span class="pill">algo.betweenness</span><span class="pill">algo.SPpaths</span></div></div>
+          <div><h3>Find where it starts</h3>
+            <p>Walk the call graph down from the alerting service. The deepest unhealthy service with healthy dependencies is the origin. Changes outside that subgraph are ruled out.</p></div>
 <pre class="code"><span class="k">MATCH</span> p = (s:Service {name: <span class="s">$alerting</span>})-[:CALLS*0..6]->(d:Service)
 <span class="k">RETURN</span> d.name, min(length(p)) <span class="k">AS</span> hops
 
-<span class="c">// a flag reaches a service it was never deployed to</span>
+<span class="c">// a flag reaches services it was never deployed to</span>
 <span class="k">MATCH</span> (x:FlagChange)-[:TOGGLED]->(:Flag)-[:AFFECTS]->(d:Service)
 <span class="k">WHERE</span> d.name <span class="k">IN</span> <span class="s">$candidates</span> <span class="k">AND</span> x.at >= <span class="s">$since</span>
 <span class="k">RETURN</span> d.name, x</pre>
         </div>
         <div class="stage-row">
           <div class="idx">2</div>
-          <div><h3>Confirm with logs and memory</h3>
-            <p>Read the logs of the top suspect only. Search incident memory with a full-text index plus graph overlap, and pull the root cause and the fix of anything similar. A runbook attached to the service travels with the answer.</p>
-            <div class="tools"><span class="pill">get_logs</span><span class="pill">find_similar_incidents</span><span class="pill">get_owner</span></div></div>
+          <div><h3>Check logs and memory</h3>
+            <p>Read the logs of that one service, and find past incidents with the same cause and what fixed them.</p></div>
 <pre class="code"><span class="k">CALL</span> db.idx.fulltext.queryNodes(<span class="s">'Incident'</span>, <span class="s">'checkout|timeout|fraud'</span>)
 <span class="k">YIELD</span> node, score
 <span class="k">MATCH</span> (i:Incident) <span class="k">WHERE</span> i.id <span class="k">IN</span> <span class="s">$ids</span>
@@ -141,21 +138,15 @@
         <div class="stage-row">
           <div class="idx">3</div>
           <div><h3>Act, dry run first</h3>
-            <p>Roll back, restart or flip a flag. Each action defaults to a dry run that shows the plan and its blast radius. A Claude Code hook refuses any real action without a matching dry run in the graph from the last 15 minutes, so the safety policy is itself a query.</p>
-            <div class="tools"><span class="pill">rollback_service</span><span class="pill">set_feature_flag</span><span class="pill">restart_service</span></div></div>
-<pre class="code"><span class="c">// PreToolUse guard: no blind remediation</span>
-<span class="k">MATCH</span> (a:Action {kind: <span class="s">$kind</span>, target: <span class="s">$target</span>, dry_run: true})
+            <p>Roll back, restart or turn off a flag. A hook refuses any real action that has no matching dry run in the graph.</p></div>
+<pre class="code"><span class="k">MATCH</span> (a:Action {kind: <span class="s">$kind</span>, target: <span class="s">$target</span>, dry_run: true})
 <span class="k">WHERE</span> a.at >= <span class="s">$fifteen_minutes_ago</span>
-<span class="k">RETURN</span> count(a)
-
-<span class="c">// every action is explainable later</span>
-(:Action)-[:BECAUSE]->(:Evidence)   (:Action)-[:REVERTS]->(:Change)</pre>
+<span class="k">RETURN</span> count(a)</pre>
         </div>
         <div class="stage-row">
           <div class="idx">4</div>
-          <div><h3>Verify on the service users hit</h3>
-            <p>Poll the alerting service until it is healthy twice in a row. If it is not, rank again from the new state. The agent is allowed at most three actions.</p>
-            <div class="tools"><span class="pill">verify_recovery</span><span class="pill">get_service_health</span></div></div>
+          <div><h3>Verify</h3>
+            <p>Wait until the alerting service is healthy twice in a row. If it is not, rank again.</p></div>
 <pre class="code"><span class="c">verify_recovery(frontend)</span>
   t=4s   degraded  error 6.7%
   t=7s   healthy   error 0.0%   p95 112 ms
@@ -163,13 +154,11 @@
         </div>
         <div class="stage-row">
           <div class="idx">5</div>
-          <div><h3>Page the owner and remember</h3>
-            <p>Find who is on call through the ownership graph and page them with the evidence path. Resolve the incident with a ROOT_CAUSE edge to the exact change. The next agent, in a different session, finds it.</p>
-            <div class="tools"><span class="pill">notify_owner</span><span class="pill">resolve_incident</span><span class="pill">explain_incident</span></div></div>
-<pre class="code"><span class="k">MATCH</span> (t:Team)-[:OWNS]->(s:Service {name: <span class="s">$s</span>})
+          <div><h3>Page and remember</h3>
+            <p>Page whoever is on call, and store the incident with a ROOT_CAUSE edge to the change that caused it.</p></div>
+<pre class="code"><span class="k">MATCH</span> (t:Team)-[:OWNS]->(:Service {name: <span class="s">$s</span>})
 <span class="k">OPTIONAL MATCH</span> (p:Person)-[:ON_CALL_FOR]->(t)
-<span class="k">OPTIONAL MATCH</span> (t)-[:ESCALATES_TO]->(e:Team)&lt;-[:ON_CALL_FOR]-(ep:Person)
-<span class="k">RETURN</span> t.name, p.handle, e.name, ep.handle
+<span class="k">RETURN</span> t.name, p.handle
 
 (:Incident)-[:ROOT_CAUSE]->(:Change)-[:CHANGED]->(:Service)</pre>
         </div>
@@ -179,22 +168,20 @@
 
   <section class="band" id="evidence">
     <div class="wrap">
-      <div class="eyebrow">Does the graph matter?</div>
-      <h2 style="margin-top:10px">Same model, same actions, with and without the graph</h2>
-      <p class="lede" style="margin-top:14px" id="bench-lede">Each failure is injected into the live stack and the same headless agent runs twice: once with the FalkorDB tools, once with only health, logs and a flat change list. We ran it with full telemetry, where stats say where errors originate the way tracing does, and with basic telemetry that has error rates and latency only.</p>
+      <h2>With and without the graph</h2>
+      <p class="lede">Six injected failures, the same agent and the same remediation tools. Baseline gets only health, logs and a flat list of changes.</p>
       <div class="bench-grid">
         <div class="bars" id="bars"></div>
-        <div class="findings" id="findings"></div>
+        <div class="stats" id="findings"></div>
       </div>
-      <div class="table-wrap" style="margin-top:32px"><table id="bench-table"></table></div>
-      <p class="small" style="margin-top:10px" id="bench-note"></p>
+      <div class="table-wrap"><table id="bench-table"></table></div>
+      <p class="small" id="bench-note"></p>
     </div>
   </section>
 
   <section class="band" id="install">
     <div class="wrap">
-      <div class="eyebrow">Runs where you already work</div>
-      <h2 style="margin-top:10px">One command to install, one to set up</h2>
+      <h2>Install</h2>
       <div class="install">
         <div class="hosts" role="tablist" aria-label="Agent host" id="hosts"></div>
         <div>
@@ -202,73 +189,41 @@
           <p class="snippet-note" id="snippet-note"></p>
         </div>
       </div>
-    </div>
-  </section>
-
-  <section class="band" id="deploy">
-    <div class="wrap">
-      <div class="eyebrow">Where it runs</div>
-      <h2 style="margin-top:10px">No Rootpath server. Your agent, your graph.</h2>
       <div class="where">
-        <div class="finding key-f">
-          <b>On your machine</b>
-          <p>Claude Code starts the Rootpath MCP server as a local process when the plugin loads. <code>/rootpath:map</code> builds the graph from your repository and config; <code>rootpath ingest --watch</code> keeps health and deploys fresh if you want it continuous.</p>
-        </div>
-        <div class="finding key-f">
-          <b>Your FalkorDB</b>
-          <p>Bring your own: a local Docker container or a FalkorDB Cloud instance. The URL goes into the plugin's setup dialog and the system keychain. All state, from topology to incident memory, lives there.</p>
-        </div>
-        <div class="finding">
-          <b>Rootpath Cloud <span class="pill">coming soon</span></b>
-          <p>A hosted graph per workspace (one FalkorDB graph per tenant), a remote MCP endpoint and webhooks for deploys and alerts, so a team can start without running a database.</p>
-        </div>
+        <div><b>Runs locally</b><p>The MCP server is a local process your agent starts. There is no Rootpath server.</p></div>
+        <div><b>Your FalkorDB</b><p>Local Docker or FalkorDB Cloud. Topology, changes, incidents and agent steps all live there.</p></div>
+        <div><b>Rootpath Cloud <span class="pill">coming soon</span></b><p>A hosted graph per workspace, a remote MCP endpoint, and webhooks for deploys and alerts.</p></div>
       </div>
     </div>
   </section>
 
   <section class="band" id="model">
     <div class="wrap">
-      <div class="eyebrow">The graph</div>
-      <h2 style="margin-top:10px">Everything the agent knows is a node or an edge</h2>
-      <div class="model">
-<pre class="code"><span class="c">// topology and ownership</span>
-(:Team)-[:OWNS]->(:Service)-[:CALLS {declared, observed}]->(:Service)
+      <h2>The graph</h2>
+      <p class="lede">The agent reads it with read-only queries. Only validated tools write to it.</p>
+<pre class="code model"><span class="c">// topology and ownership</span>
+(:Team)-[:OWNS]->(:Service)-[:CALLS]->(:Service)
 (:Person)-[:ON_CALL_FOR]->(:Team)-[:ESCALATES_TO]->(:Team)
 (:Runbook)-[:FOR]->(:Service)   (:Flag)-[:AFFECTS]->(:Service)
 
 <span class="c">// what changed</span>
-(:Change:Deploy {version, prev_version, at})-[:CHANGED]->(:Service)
-(:Change:FlagChange {flag, from, to, at})-[:TOGGLED]->(:Flag)
-(:Person)-[:AUTHORED]->(:Change)   (:Deploy)-[:ROLLED_BACK]->(:Deploy)
+(:Change:Deploy)-[:CHANGED]->(:Service)
+(:Change:FlagChange)-[:TOGGLED]->(:Flag)
+(:Deploy)-[:ROLLED_BACK]->(:Deploy)
 
-<span class="c">// incident memory and provenance</span>
+<span class="c">// incident memory</span>
 (:Incident)-[:IMPACTED]->(:Service)
 (:Incident)-[:ROOT_CAUSE]->(:Change | :Service)
 (:Incident)-[:RESOLVED_BY]->(:Action)-[:BECAUSE]->(:Evidence)
-(:Action)-[:REVERTS]->(:Change)
-(:Investigation)-[:STEP {n, tool, at}]->(<span class="s">any node the agent looked at</span>)</pre>
-        <ul>
-          <li><b>Built from real sources.</b> Services, owners and declared calls come from Docker Compose labels; observed calls and live health from each service's stats; deploys and flag flips from the change log; runbooks from Markdown front-matter.</li>
-          <li><b>Read-only reasoning.</b> Every query the agent's tools run goes through <code>GRAPH.RO_QUERY</code> with a 2 second timeout and a row cap. Only deterministic code writes.</li>
-          <li><b>Idempotent ingest.</b> Every sync is a <code>MERGE</code> on a stable key, so the graph can be rebuilt from its sources at any time.</li>
-          <li><b>Algorithms as tools.</b> <code>algo.betweenness</code> breaks ties between suspects; <code>algo.SPpaths</code> returns the evidence path the agent shows you.</li>
-          <li><b>Investigations are data.</b> Each tool call is a STEP edge to the nodes it looked at. The dashboard and this page replay them.</li>
-        </ul>
-      </div>
+(:Investigation)-[:STEP {n, tool}]->(<span class="s">any node the agent read</span>)</pre>
     </div>
   </section>
 </main>
 
 <footer>
   <div class="wrap foot">
-    <div>
-      <p><b style="color:var(--ink)">Rootpath</b> was built for Graph Hacks: Context for AI Agents (WeMakeDevs × FalkorDB, October 2026). Apache-2.0.</p>
-      <p>Prior art: woodpecker-mcp also keeps a service graph in FalkorDB, with analysis only. AWS DevOps Agent, Datadog Bits AI SRE, Dynatrace and Causely use topology graphs inside their own platforms. Rootpath is open, self-hosted, acts and verifies, remembers, and runs inside the agent you already use.</p>
-    </div>
-    <div>
-      <p>Built with Claude Code as a pair programmer. At runtime the agent is Claude, through Claude Code headless or any MCP host. No model training anywhere.</p>
-      <p>The replays on this page are recordings of real runs against the demo stack, played back in your browser.</p>
-    </div>
+    <span><b>Rootpath</b> · Apache-2.0</span>
+    <a href="https://github.com/IWhitebird/rootpath">GitHub</a>
   </div>
 </footer>
 

@@ -28,10 +28,18 @@ const STYLE: GraphStyle = {
   fitOnce: false,
 };
 
+/** The hero draws the failure path: services, what changed, and incidents with their root cause.
+ * Owners, runbooks and past actions stay in the graph, off this canvas. */
+const SHOWN = new Set(["Service", "Change", "Flag", "Incident"]);
+
 export type ChipKind = "" | "alert" | "step" | "ok";
 
 export class Stage {
-  readonly graph = new GraphView(byId("graph"), { style: STYLE });
+  readonly graph = new GraphView(byId("graph"), {
+    style: STYLE,
+    visible: (n) => SHOWN.has(n.type),
+    linkVisible: (l) => l.type !== "IMPACTED",
+  });
   private readonly replayOnly = ["play", "speed", "restart", "track"].map((id) => byId(id));
   private readonly liveStatusEl = byId("live-status");
   private readonly offlineEl = byId("offline");

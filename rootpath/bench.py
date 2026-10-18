@@ -130,7 +130,7 @@ def write_report(results: list[dict]) -> None:
             lines.append(f"| {r['scenario']} | {r['mode']} | error: {r['error']} | | | | | | | |")
             continue
         lines.append(
-            f"| {r['scenario']} | {r['mode']} | {'✅' if r['correct_action'] else '❌'} | {', '.join(r['wrong_actions']) or '-'} | "
+            f"| {r['scenario']} | {r['mode']} | {'yes' if r['correct_action'] else 'no'} | {', '.join(r['wrong_actions']) or '-'} | "
             f"{r['diagnosis_calls']} | {r['logs_read']} | {r['tool_calls']} | {r['agent_s']}s | {r['input_tokens']:,} | ${(r['cost_usd'] or 0):.3f} |"
         )
     lines += [

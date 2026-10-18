@@ -1,7 +1,7 @@
 {
   "name": "rootpath",
   "version": "0.1.0",
-  "description": "Turn your coding agent into an on-call engineer: graph-powered incident diagnosis, safe remediation and incident memory on FalkorDB.",
+  "description": "An incident agent that reasons over a FalkorDB graph of your services, changes, owners and past incidents.",
   "author": {
     "name": "Shreyas Patange",
     "url": "https://github.com/IWhitebird"

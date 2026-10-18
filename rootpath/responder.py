@@ -120,7 +120,7 @@ def run_agent(
     started = time.time()
     tool_calls, result = [], {}
     say = (lambda *a: None) if quiet else (lambda *a: print(*a, flush=True))
-    say(f"\n🚨 {prompt}\n   investigation {inv} ({mode} mode) -> headless Claude Code")
+    say(f"\n{prompt}\n   investigation {inv} ({mode} mode) -> headless Claude Code")
     with (
         transcript.open("w") as out,
         subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=str(config.ROOT)) as proc,
@@ -176,7 +176,7 @@ def run_agent(
     )
     (RUNS / f"{inv}.summary.json").write_text(json.dumps(summary, indent=2))
     say(
-        f"\n✅ agent finished in {summary['duration_s']}s, {summary['tool_calls']} tool calls"
+        f"\nagent finished in {summary['duration_s']}s, {summary['tool_calls']} tool calls"
         + (f", ${summary['cost_usd']:.3f}" if summary["cost_usd"] else "")
         + f"\n\n{summary['report']}\n"
     )
@@ -185,7 +185,7 @@ def run_agent(
 
 def watch(mode: str = "graph", autonomy: str = "auto", once: bool = False, poll: float = 5.0) -> None:
     print(
-        f"👀 watching {len(infra.services())} services every {poll:.0f}s (mode={mode}, autonomy={autonomy}) ...",
+        f"watching {len(infra.services())} services every {poll:.0f}s (mode={mode}, autonomy={autonomy}) ...",
         flush=True,
     )
     strikes = 0

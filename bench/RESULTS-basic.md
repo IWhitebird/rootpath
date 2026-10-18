@@ -8,30 +8,30 @@ Same injected failure, same model (headless Claude Code), same remediation actio
 
 | scenario | mode | correct fix | wrong actions | calls to root cause | logs read | total calls | agent time | input tokens | cost |
 |---|---|---|---|---|---|---|---|---|---|
-| bad-deploy | graph | ✅ | - | 4 | 1 | 9 | 50.0s | 103,644 | $0.137 |
-| bad-deploy | graph | ✅ | - | 4 | 1 | 9 | 45.7s | 104,266 | $0.135 |
-| bad-deploy | baseline | ✅ | - | 4 | 2 | 7 | 34.9s | 47,325 | $0.088 |
-| bad-deploy | baseline | ✅ | - | 4 | 2 | 7 | 34.6s | 46,674 | $0.089 |
-| flag | graph | ✅ | - | 4 | 1 | 9 | 41.3s | 103,794 | $0.135 |
-| flag | graph | ✅ | - | 4 | 1 | 9 | 43.2s | 104,079 | $0.139 |
-| flag | baseline | ✅ | - | 5 | 3 | 8 | 40.4s | 56,975 | $0.102 |
-| flag | baseline | ✅ | - | 4 | 2 | 7 | 39.0s | 46,406 | $0.092 |
-| pool | graph | ✅ | - | 4 | 1 | 9 | 36.6s | 90,191 | $0.119 |
-| pool | graph | ✅ | - | 4 | 1 | 9 | 38.8s | 100,287 | $0.119 |
-| pool | baseline | ✅ | - | 6 | 4 | 9 | 33.6s | 53,846 | $0.088 |
-| pool | baseline | ✅ | - | 6 | 4 | 9 | 32.9s | 53,532 | $0.088 |
-| deploy-noise | graph | ✅ | - | 4 | 1 | 9 | 46.6s | 105,743 | $0.137 |
-| deploy-noise | graph | ✅ | - | 4 | 1 | 11 | 58.3s | 133,912 | $0.159 |
-| deploy-noise | baseline | ✅ | - | 5 | 3 | 10 | 49.1s | 75,028 | $0.129 |
-| deploy-noise | baseline | ✅ | - | 4 | 2 | 9 | 47.1s | 70,354 | $0.113 |
-| flag-collision | graph | ✅ | - | 4 | 1 | 9 | 44.7s | 107,049 | $0.146 |
-| flag-collision | graph | ✅ | - | 4 | 1 | 9 | 41.7s | 91,293 | $0.136 |
-| flag-collision | baseline | ✅ | - | 9 | 6 | 17 | 156.5s | 224,652 | $0.466 |
-| flag-collision | baseline | ✅ | - | 6 | 3 | 12 | 76.5s | 100,414 | $0.227 |
-| pool-after-deploy | graph | ✅ | - | 4 | 1 | 9 | 41.7s | 79,130 | $0.129 |
-| pool-after-deploy | graph | ✅ | - | 4 | 1 | 9 | 43.5s | 98,485 | $0.125 |
-| pool-after-deploy | baseline | ✅ | - | 8 | 6 | 14 | 71.3s | 96,840 | $0.162 |
-| pool-after-deploy | baseline | ✅ | - | 7 | 5 | 13 | 59.0s | 98,549 | $0.159 |
+| bad-deploy | graph | yes | - | 4 | 1 | 9 | 50.0s | 103,644 | $0.137 |
+| bad-deploy | graph | yes | - | 4 | 1 | 9 | 45.7s | 104,266 | $0.135 |
+| bad-deploy | baseline | yes | - | 4 | 2 | 7 | 34.9s | 47,325 | $0.088 |
+| bad-deploy | baseline | yes | - | 4 | 2 | 7 | 34.6s | 46,674 | $0.089 |
+| flag | graph | yes | - | 4 | 1 | 9 | 41.3s | 103,794 | $0.135 |
+| flag | graph | yes | - | 4 | 1 | 9 | 43.2s | 104,079 | $0.139 |
+| flag | baseline | yes | - | 5 | 3 | 8 | 40.4s | 56,975 | $0.102 |
+| flag | baseline | yes | - | 4 | 2 | 7 | 39.0s | 46,406 | $0.092 |
+| pool | graph | yes | - | 4 | 1 | 9 | 36.6s | 90,191 | $0.119 |
+| pool | graph | yes | - | 4 | 1 | 9 | 38.8s | 100,287 | $0.119 |
+| pool | baseline | yes | - | 6 | 4 | 9 | 33.6s | 53,846 | $0.088 |
+| pool | baseline | yes | - | 6 | 4 | 9 | 32.9s | 53,532 | $0.088 |
+| deploy-noise | graph | yes | - | 4 | 1 | 9 | 46.6s | 105,743 | $0.137 |
+| deploy-noise | graph | yes | - | 4 | 1 | 11 | 58.3s | 133,912 | $0.159 |
+| deploy-noise | baseline | yes | - | 5 | 3 | 10 | 49.1s | 75,028 | $0.129 |
+| deploy-noise | baseline | yes | - | 4 | 2 | 9 | 47.1s | 70,354 | $0.113 |
+| flag-collision | graph | yes | - | 4 | 1 | 9 | 44.7s | 107,049 | $0.146 |
+| flag-collision | graph | yes | - | 4 | 1 | 9 | 41.7s | 91,293 | $0.136 |
+| flag-collision | baseline | yes | - | 9 | 6 | 17 | 156.5s | 224,652 | $0.466 |
+| flag-collision | baseline | yes | - | 6 | 3 | 12 | 76.5s | 100,414 | $0.227 |
+| pool-after-deploy | graph | yes | - | 4 | 1 | 9 | 41.7s | 79,130 | $0.129 |
+| pool-after-deploy | graph | yes | - | 4 | 1 | 9 | 43.5s | 98,485 | $0.125 |
+| pool-after-deploy | baseline | yes | - | 8 | 6 | 14 | 71.3s | 96,840 | $0.162 |
+| pool-after-deploy | baseline | yes | - | 7 | 5 | 13 | 59.0s | 98,549 | $0.159 |
 
 ## Totals
 

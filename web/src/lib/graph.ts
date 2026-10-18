@@ -64,6 +64,8 @@ export interface GraphOptions {
   style: GraphStyle;
   /** Which nodes to draw (the console's legend toggles node types). */
   visible?: (n: GraphNode) => boolean;
+  /** Which links to draw between visible nodes. */
+  linkVisible?: (l: GraphLink) => boolean;
   onNodeClick?: (n: SimNode) => void;
   onBackgroundClick?: () => void;
 }
@@ -96,6 +98,7 @@ export class GraphView {
   private readonly fg: ForceGraph<SimNode, SimLink>;
   private readonly style: GraphStyle;
   private readonly visible: (n: GraphNode) => boolean;
+  private readonly linkVisible: (l: GraphLink) => boolean;
   private colors = readPalette();
   private nodes = new Map<string, SimNode>();
   private links: GraphLink[] = [];
@@ -105,9 +108,10 @@ export class GraphView {
   private latest = new Set<string>();
   private fitted = false;
 
-  constructor(el: HTMLElement, { style, visible = () => true, onNodeClick, onBackgroundClick }: GraphOptions) {
+  constructor(el: HTMLElement, { style, visible = () => true, linkVisible = () => true, onNodeClick, onBackgroundClick }: GraphOptions) {
     this.style = style;
     this.visible = visible;
+    this.linkVisible = linkVisible;
     const s = style;
     this.fg = new ForceGraph<SimNode, SimLink>(el)
       .nodeId("id")
@@ -268,7 +272,9 @@ export class GraphView {
     const nodes = [...this.nodes.values()].filter((n) => this.visible(n));
     const ids = new Set(nodes.map((n) => n.id));
     // force-graph swaps link ends for node objects, so it gets copies of the id-based links.
-    const links = this.links.filter((l) => ids.has(l.source) && ids.has(l.target)).map((l): SimLink => ({ ...l }));
+    const links = this.links
+      .filter((l) => ids.has(l.source) && ids.has(l.target) && this.linkVisible(l))
+      .map((l): SimLink => ({ ...l }));
     this.fg.graphData({ nodes, links });
   }
 
