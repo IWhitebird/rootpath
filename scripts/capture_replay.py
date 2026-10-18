@@ -59,9 +59,13 @@ try:
     cdp("Emulation.setDeviceMetricsOverride", width=1440, height=1000, deviceScaleFactor=1, mobile=False)
     cdp("Page.navigate", url=url)
     time.sleep(2.5)
+    # Scroll the player into view, then measure it in page coordinates, which the clip uses.
+    cdp("Runtime.evaluate", expression="document.getElementById('replay').scrollIntoView({block: 'center'})")
+    time.sleep(0.5)
     rect = cdp(
         "Runtime.evaluate",
-        expression="JSON.stringify(document.getElementById('replay').getBoundingClientRect())",
+        expression="(() => { const r = document.getElementById('replay').getBoundingClientRect();"
+        " return JSON.stringify({x: r.x + scrollX, y: r.y + scrollY, width: r.width, height: r.height}); })()",
         returnByValue=True,
     )["result"]["value"]
     r = json.loads(rect)
