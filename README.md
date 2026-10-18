@@ -131,7 +131,7 @@ uv sync
 uv run pytest tests/test_unit.py           # no Docker needed
 uv run pytest tests/test_integration.py    # against the demo stack
 uv run ruff check . && uv run ruff format --check .
-cd web && npm ci && npm run build          # website, console and the read-only API
+cd web && npm ci && npm run build          # website and console
 ```
 
 ## AI assistance

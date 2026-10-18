@@ -1,8 +1,8 @@
-/** Data shapes shared by the website, the operator console and the live API. */
+/** Data shapes shared by the website and the operator console. */
 
 export type Props = Record<string, unknown>;
 
-/** A graph node as rootpath/web.py and web/api/live.ts return it. `id` is "<Label>:<key>". */
+/** A graph node as rootpath/web.py returns it. `id` is "<Label>:<key>". */
 export interface GraphNode {
   id: string;
   type: string;
@@ -180,30 +180,3 @@ export interface Change {
   from?: boolean | string;
   to?: boolean | string;
 }
-
-// ---------- live API: GET /api/live (web/api/live.ts) ----------
-
-export interface LiveService {
-  status: string;
-  error_rate: number;
-  p95_ms: number;
-  version: string | null;
-}
-
-export interface LiveSnapshot {
-  ok: true;
-  graph_name: string;
-  /** When the ingestor last synced service health, epoch seconds. */
-  updated_at: number | null;
-  graph: GraphData;
-  services: Record<string, LiveService>;
-  investigation: { meta: InvestigationMeta; steps: GraphStep[] } | null;
-  incidents: Incident[];
-}
-
-export interface LiveFailure {
-  ok: false;
-  error: string;
-}
-
-export type LiveResponse = LiveSnapshot | LiveFailure;

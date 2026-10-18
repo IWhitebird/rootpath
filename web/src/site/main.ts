@@ -2,65 +2,48 @@ import "./site.css";
 import { byId } from "../lib/html";
 import { getJson } from "../lib/http";
 import type { Bench, Replay } from "../lib/types";
-import { renderBench } from "./bench";
-import { renderInstall } from "./install";
-import { LiveView } from "./live";
-import { Player, prepare, RECORDINGS, type Recording, type Tab } from "./replay";
+import { renderStats } from "./bench";
+import { Player } from "./replay";
 import { Stage } from "./stage";
 
 const DATA = `${import.meta.env.BASE_URL}data/`;
-const LIVE: Tab = { key: "live", title: "Live · FalkorDB Cloud", sub: "the real graph, right now" };
 
-/** The recordings that loaded, in tab order; a missing one just has no tab. */
-async function loadRecordings(): Promise<Recording[]> {
-  const loaded = await Promise.all(
-    RECORDINGS.map((tab) => getJson<Replay>(`${DATA}replays/${tab.key}.json`).then((r) => prepare(tab, r), () => null)),
-  );
-  return loaded.filter((r) => r !== null);
-}
-
-async function startConsole(): Promise<void> {
-  const recordings = await loadRecordings();
-  const stage = new Stage();
-  const player = new Player(stage, recordings);
-  const live = new LiveView(stage);
-  const tabs = byId("tabs");
-  const select = (key: string) => {
-    for (const b of tabs.querySelectorAll<HTMLElement>(".tab")) b.setAttribute("aria-selected", String(b.dataset.key === key));
-    if (key === LIVE.key) {
-      player.setPlaying(false);
-      live.start();
-    } else {
-      live.stop();
-      player.load(key);
-    }
-  };
-  for (const tab of [...recordings, LIVE]) {
-    const b = document.createElement("button");
-    b.className = "tab";
-    b.setAttribute("role", "tab");
-    b.dataset.key = tab.key;
-    b.innerHTML = `${tab === LIVE ? '<span class="pulse" aria-hidden="true"></span>' : ""}${tab.title}<small>${tab.sub}</small>`;
-    b.onclick = () => {
-      select(tab.key);
-      if (tab !== LIVE) player.setPlaying(true);
-    };
-    tabs.appendChild(b);
+/** Copy an element's text, or select it where the clipboard is not available. */
+async function copyText(button: HTMLElement, source: HTMLElement): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(source.textContent ?? "");
+    button.textContent = "Copied";
+  } catch {
+    const range = document.createRange();
+    range.selectNodeContents(source);
+    const selection = getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    button.textContent = "Selected";
   }
-
-  const params = new URLSearchParams(location.search);
-  const wanted = params.get("scenario");
-  const keys = [...recordings.map((r) => r.key), LIVE.key];
-  const first = wanted && keys.includes(wanted) ? wanted : keys[0];
-  select(first);
-  const t = params.get("t");
-  if (t && first !== LIVE.key) player.seek(Number(t) || 0);
-  const speed = params.get("speed");
-  if (speed) player.setSpeed(Number(speed) || 2);
+  setTimeout(() => {
+    button.textContent = "Copy";
+  }, 1600);
 }
 
-renderInstall();
-getJson<Bench>(`${DATA}bench.json`).then(renderBench, () => {
-  byId("evidence").hidden = true;
+for (const button of document.querySelectorAll<HTMLButtonElement>("[data-copy]")) {
+  const source = byId(button.dataset.copy ?? "");
+  button.onclick = () => void copyText(button, source);
+}
+
+getJson<Bench>(`${DATA}bench.json`).then(renderStats, () => {
+  byId("results").hidden = true;
 });
-void startConsole();
+
+// ?speed=3 and ?t=40 are for recording the README media (scripts/make_media.sh).
+const params = new URLSearchParams(location.search);
+getJson<Replay>(`${DATA}replays/flag.json`).then(
+  (replay) => {
+    const player = new Player(new Stage(), replay, Number(params.get("speed")) || 2);
+    const t = params.get("t");
+    if (t) player.seek(Number(t) || 0);
+  },
+  () => {
+    byId("replay").hidden = true;
+  },
+);

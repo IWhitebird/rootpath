@@ -16,161 +16,138 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400&display=swap">
 </head>
 <body>
-<div class="wrap">
-  <header class="top">
-    <a class="brand" href="#top" aria-label="Rootpath home">
-      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
-        <circle cx="5" cy="6" r="3.2" fill="currentColor"/><circle cx="20" cy="6" r="3.2" fill="currentColor" opacity=".45"/>
-        <circle cx="13" cy="13" r="3.2" fill="currentColor"/><circle cx="20" cy="20" r="3.6" fill="var(--bad)"/>
-        <path d="M5 6 13 13 20 20M20 6 13 13" stroke="currentColor" stroke-width="1.6" fill="none" opacity=".55"/>
-        <circle cx="20" cy="20" r="6.2" fill="none" stroke="var(--path)" stroke-width="1.6"/>
-      </svg>
-      Rootpath
-    </a>
-    <nav aria-label="Sections">
-      <a href="#install">Install</a>
-      <a href="#how">How it works</a>
-      <a href="#evidence">Benchmark</a>
-      <a href="https://github.com/IWhitebird/rootpath">GitHub</a>
-    </nav>
-  </header>
-</div>
+<header class="wrap top">
+  <a class="brand" href="#top" aria-label="Rootpath home">
+    <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
+      <circle cx="5" cy="6" r="3.2" fill="currentColor"/><circle cx="20" cy="6" r="3.2" fill="currentColor" opacity=".45"/>
+      <circle cx="13" cy="13" r="3.2" fill="currentColor"/><circle cx="20" cy="20" r="3.6" fill="var(--bad)"/>
+      <path d="M5 6 13 13 20 20M20 6 13 13" stroke="currentColor" stroke-width="1.6" fill="none" opacity=".55"/>
+      <circle cx="20" cy="20" r="6.2" fill="none" stroke="var(--path)" stroke-width="1.6"/>
+    </svg>
+    Rootpath
+  </a>
+  <nav aria-label="Sections">
+    <a href="#how">How it works</a>
+    <a href="#start">Get started</a>
+    <a href="https://github.com/IWhitebird/rootpath">GitHub</a>
+  </nav>
+</header>
 
 <main id="top">
-  <section class="hero">
-    <div class="wrap">
-      <div class="hero-head">
-        <h1>The alert is never where <span class="hl">the bug is.</span></h1>
-        <div class="hero-copy">
-          <p>Rootpath gives your AI agent a FalkorDB graph of your services, deploys, feature flags, owners and past incidents. It follows a failure to where it starts, fixes it, checks the fix, and remembers.</p>
-          <div class="quick">
-            <pre class="code" id="quick-cmd">curl -fsSL https://rootpath.iwhitebird.com/install.sh | sh</pre>
-            <button class="copy" data-copy="quick-cmd">Copy</button>
-          </div>
-          <p class="small">Then <code>rootpath init</code>. Works with Claude Code, Codex, Cursor and any MCP host. <a href="https://github.com/IWhitebird/rootpath">Source on GitHub</a>.</p>
-        </div>
-      </div>
-
-      <div class="console" id="replay" aria-label="Replay of a recorded incident">
-        <div class="console-bar">
-          <div class="tabs" role="tablist" aria-label="Recorded incidents" id="tabs"></div>
-          <div class="transport">
-            <span class="clock" id="clock" aria-live="off">T+00:00</span>
-            <button class="icon-btn" id="play" aria-label="Pause replay"></button>
-            <button class="icon-btn speed" id="speed" aria-label="Playback speed">2×</button>
-            <button class="icon-btn" id="restart" aria-label="Restart replay">
-              <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8a5 5 0 1 0 1.6-3.7M3 2v3.3h3.3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
-            </button>
-          </div>
-        </div>
-        <div class="console-body">
-          <div class="stage">
-            <div class="graph-area">
-              <div id="graph"></div>
-              <div class="caption" id="caption"><span class="chip">ready</span><span class="text">Loading the recording.</span></div>
-              <div class="offline" id="offline" role="status" hidden>
-                <div>
-                  <svg width="44" height="30" viewBox="0 0 44 30" aria-hidden="true">
-                    <circle cx="6" cy="15" r="4" fill="var(--idle)"/><circle cx="22" cy="7" r="4" fill="var(--idle)"/><circle cx="38" cy="21" r="4" fill="var(--bad)"/>
-                    <path d="M9.5 13.2 18.5 8.8" stroke="var(--idle)" stroke-width="1.6"/><path d="M25.5 9.3 28.8 11.6M31.4 13.4l3.1 2.2" stroke="var(--bad)" stroke-width="1.6" stroke-linecap="round"/>
-                  </svg>
-                  <b>Live graph offline: <span id="offline-error"></span></b>
-                  <p>Retrying every 5 s. The recorded incidents still play.</p>
-                </div>
-              </div>
-            </div>
-            <div class="legend" aria-hidden="true">
-              <span><i style="background:var(--ok)"></i>service</span>
-              <span><i class="dia" style="background:var(--warn)"></i>deploy or flag change</span>
-              <span><i class="dia" style="background:var(--accent)"></i>flag</span>
-              <span><i style="background:var(--bad);opacity:.75"></i>past incident</span>
-              <span><i style="background:transparent;box-shadow:0 0 0 2px var(--path)"></i>read by the agent</span>
-            </div>
-          </div>
-          <div class="side">
-            <div class="health"><h4 id="health-title">Live health · last 8s</h4><div id="health"></div></div>
-            <div class="steps"><h4>Agent steps</h4><div id="steps"><p class="empty">Waiting for the alert.</p></div></div>
-          </div>
-        </div>
-        <div class="timeline">
-          <div class="track" id="track">
-            <div class="rail"></div><div class="fill" id="fill"></div>
-            <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Scrub through the incident">
-          </div>
-          <div class="live-status" id="live-status" hidden></div>
-        </div>
-        <details class="report" id="report">
-          <summary><span>The agent's report</span><span class="meta" id="report-meta"></span></summary>
-          <div class="md" id="report-body"></div>
-        </details>
-      </div>
-      <p class="small replay-note">Recordings of real runs against the demo stack. The Live tab reads the graph on FalkorDB Cloud.</p>
+  <section class="hero wrap">
+    <h1>The alert is never where <span class="hl">the bug is.</span></h1>
+    <p class="sub">Rootpath gives your AI agent a FalkorDB graph of your services, deploys, feature flags, owners and past incidents. It finds where a failure starts, fixes it, checks the fix, and remembers.</p>
+    <div class="quick">
+      <pre class="code" id="hero-cmd">curl -fsSL https://rootpath.iwhitebird.com/install.sh | sh</pre>
+      <button class="copy" data-copy="hero-cmd">Copy</button>
     </div>
+    <p class="small">For Claude Code, Codex, Cursor and any MCP host. Open source, Apache-2.0.</p>
   </section>
 
-  <section class="band" id="install">
-    <div class="wrap">
-      <h2>Install</h2>
-      <div class="install">
-        <div class="hosts" role="tablist" aria-label="Agent host" id="hosts"></div>
-        <div class="snippet"><pre class="code" id="snippet"></pre><button class="copy" data-copy="snippet">Copy</button></div>
-        <p class="snippet-note" id="snippet-note"></p>
+  <section class="wrap demo">
+    <div class="player" id="replay" aria-label="Replay of a recorded incident">
+      <div class="player-bar">
+        <div class="title">
+          <b>A feature flag breaks checkout</b>
+          <span>The alert fires on frontend. The cause is three services down.</span>
+        </div>
+        <div class="transport">
+          <span class="clock" id="clock" aria-live="off">T+00:00</span>
+          <button class="icon-btn" id="play" aria-label="Pause replay"></button>
+          <button class="icon-btn" id="restart" aria-label="Restart replay">
+            <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8a5 5 0 1 0 1.6-3.7M3 2v3.3h3.3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          </button>
+        </div>
       </div>
-      <div class="where">
-        <div><b>Runs locally</b><p>The MCP server is a local process your agent starts. There is no Rootpath server.</p></div>
-        <div><b>Your FalkorDB</b><p>Local Docker or FalkorDB Cloud. Topology, changes, incidents and agent steps all live there.</p></div>
-        <div><b>Rootpath Cloud <span class="pill">coming soon</span></b><p>A hosted graph per workspace, a remote MCP endpoint, and webhooks for deploys and alerts.</p></div>
+      <div class="player-body">
+        <div class="stage">
+          <div class="graph-area">
+            <div id="graph"></div>
+            <div class="caption" id="caption"><span class="chip">ready</span><span class="text">Loading the recording.</span></div>
+          </div>
+          <div class="legend" aria-hidden="true">
+            <span><i style="background:var(--ok)"></i>service</span>
+            <span><i class="dia" style="background:var(--warn)"></i>deploy or flag change</span>
+            <span><i class="dia" style="background:var(--accent)"></i>flag</span>
+            <span><i style="background:var(--bad);opacity:.75"></i>past incident</span>
+            <span><i style="background:transparent;box-shadow:0 0 0 2px var(--path)"></i>read by the agent</span>
+          </div>
+        </div>
+        <div class="side">
+          <div class="health"><h4>Service health</h4><div id="health"></div></div>
+          <div class="steps"><h4>Agent steps</h4><div id="steps"><p class="empty">Waiting for the alert.</p></div></div>
+        </div>
+      </div>
+      <div class="timeline">
+        <div class="track" id="track">
+          <div class="rail"></div><div class="fill" id="fill"></div>
+          <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Scrub through the incident">
+        </div>
       </div>
     </div>
+    <p class="small player-note">A recording of a real run against the demo stack, played back at 2×.</p>
   </section>
 
   <section class="band" id="how">
     <div class="wrap">
       <h2>How it works</h2>
-      <p class="lede">The service that alerts is rarely the one that is broken. Rootpath finds the broken one by walking the graph, not by reading every log.</p>
-      <div class="how">
-        <ol class="steps-list">
-          <li><b>Find where it starts</b><span>Walk the call graph down from the alert to the deepest unhealthy service. Changes off that path are ruled out.</span></li>
-          <li><b>Check memory</b><span>Read that service's logs, and find past incidents with the same cause and what fixed them.</span></li>
-          <li><b>Act, dry run first</b><span>Roll back, restart or turn off a flag. A hook blocks any real action that was not dry-run.</span></li>
-          <li><b>Verify</b><span>Wait until the alerting service is healthy twice in a row. If not, rank again.</span></li>
-          <li><b>Page and remember</b><span>Page whoever is on call, and store the incident with its root cause for the next agent.</span></li>
-        </ol>
-<pre class="code"><span class="c">// one FalkorDB graph</span>
-(:Team)-[:OWNS]->(:Service)-[:CALLS]->(:Service)
-(:Person)-[:ON_CALL_FOR]->(:Team)
-(:Flag)-[:AFFECTS]->(:Service)
-(:Deploy)-[:CHANGED]->(:Service)
-(:FlagChange)-[:TOGGLED]->(:Flag)
-(:Incident)-[:ROOT_CAUSE]->(:Change)
-(:Incident)-[:RESOLVED_BY]->(:Action)
-
-<span class="c">// step 1, roughly</span>
-<span class="k">MATCH</span> p = (:Service {name: <span class="s">$alerting</span>})-[:CALLS*0..6]->(d)
-<span class="k">RETURN</span> d.name, min(length(p)) <span class="k">AS</span> hops</pre>
+      <div class="features">
+        <div>
+          <h3>Finds where it starts</h3>
+          <p>It walks the call graph down from the alert to the deepest unhealthy service, and rules out every change that is not on that path.</p>
+        </div>
+        <div>
+          <h3>Fixes it safely</h3>
+          <p>It rolls back, restarts or turns off a flag, as a dry run first. A hook blocks any real action that was not dry-run, then the fix is verified.</p>
+        </div>
+        <div>
+          <h3>Remembers</h3>
+          <p>The incident goes back into the graph with its root cause and fix, so the next agent starts from what the last one learned.</p>
+        </div>
       </div>
     </div>
   </section>
 
-  <section class="band" id="evidence">
+  <section class="band" id="results">
     <div class="wrap">
       <h2>With and without the graph</h2>
-      <p class="lede">Six injected failures, the same agent and the same remediation tools. Baseline gets only health, logs and a flat list of changes.</p>
-      <div class="bench-grid">
-        <div class="bars" id="bars"></div>
-        <div class="stats" id="findings"></div>
-      </div>
-      <div class="table-wrap"><table id="bench-table"></table></div>
-      <p class="small" id="bench-note"></p>
+      <p class="lede">The same agent and the same tools on six injected failures, <span id="runs">48</span> runs in all. Without the graph, it gets only health, logs and a list of changes.</p>
+      <div class="stats" id="stats"></div>
+      <p class="small"><a href="https://github.com/IWhitebird/rootpath/tree/main/bench">Every run on GitHub</a></p>
+    </div>
+  </section>
+
+  <section class="band" id="start">
+    <div class="wrap">
+      <h2>Get started</h2>
+      <ol class="start">
+        <li>
+          <b>Install</b>
+          <div class="quick">
+            <pre class="code" id="start-cmd">curl -fsSL https://rootpath.iwhitebird.com/install.sh | sh</pre>
+            <button class="copy" data-copy="start-cmd">Copy</button>
+          </div>
+        </li>
+        <li>
+          <b>Connect</b>
+          <p>It asks where your FalkorDB is, local Docker or FalkorDB Cloud, and sets up Claude Code, Codex and Cursor.</p>
+          <pre class="code">rootpath init</pre>
+        </li>
+        <li>
+          <b>Use it</b>
+          <p>In Claude Code, inside your repository: map your system into the graph, then hand it an incident.</p>
+          <pre class="code">/rootpath:map
+/rootpath:oncall checkout is throwing 500s</pre>
+        </li>
+      </ol>
+      <p class="small">Rootpath runs on your machine against your own FalkorDB. A hosted Rootpath Cloud is coming soon.</p>
     </div>
   </section>
 </main>
 
-<footer>
-  <div class="wrap foot">
-    <span><b>Rootpath</b> · Apache-2.0</span>
-    <a href="https://github.com/IWhitebird/rootpath">GitHub</a>
-  </div>
+<footer class="wrap foot">
+  <span><b>Rootpath</b> · Apache-2.0</span>
+  <a href="https://github.com/IWhitebird/rootpath">GitHub</a>
 </footer>
 
 <script type="module" src="/src/site/main.ts"></script>

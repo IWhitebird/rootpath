@@ -1,5 +1,4 @@
-/** The hero console's panels: graph, caption, health, steps, report and the timeline row.
- * The recorded replays and the live view both draw into it. */
+/** The player's panels: graph, caption, health and agent steps. */
 import { GraphView, statusTone, type GraphStyle } from "../lib/graph";
 import { byId, esc } from "../lib/html";
 import { sortByHealth, stepItem } from "../lib/panels";
@@ -28,7 +27,7 @@ const STYLE: GraphStyle = {
   fitOnce: false,
 };
 
-/** The hero draws the failure path: services, what changed, and incidents with their root cause.
+/** The player draws the failure path: services, what changed, and incidents with their root cause.
  * Owners, runbooks and past actions stay in the graph, off this canvas. */
 const SHOWN = new Set(["Service", "Change", "Flag", "Incident"]);
 
@@ -40,19 +39,8 @@ export class Stage {
     visible: (n) => SHOWN.has(n.type),
     linkVisible: (l) => l.type !== "IMPACTED",
   });
-  private readonly replayOnly = ["play", "speed", "restart", "track"].map((id) => byId(id));
-  private readonly liveStatusEl = byId("live-status");
-  private readonly offlineEl = byId("offline");
   private shownSteps = -1;
   private shownEmpty = "";
-
-  /** Switch the chrome between a recording (transport, scrubber) and the live graph (status line). */
-  setMode(live: boolean): void {
-    for (const el of this.replayOnly) el.hidden = live;
-    this.liveStatusEl.hidden = !live;
-    byId("health-title").textContent = live ? "Live health · from FalkorDB" : "Live health · last 8s";
-    if (!live) this.offline(null);
-  }
 
   /** `html` is trusted markup; callers escape what they interpolate. */
   caption(chip: string, kind: ChipKind, html: string): void {
@@ -63,14 +51,12 @@ export class Stage {
     byId("clock").textContent = text;
   }
 
-  health(services: Record<string, HealthSample>, empty: string): void {
+  health(services: Record<string, HealthSample>): void {
     const rows = sortByHealth(Object.entries(services), ([status]) => status);
-    byId("health").innerHTML = rows.length
-      ? rows.map(([name, [st, er, p95]]) => `
+    byId("health").innerHTML = rows.map(([name, [st, er, p95]]) => `
     <div class="svc" title="${esc(name)}: ${esc(st)}"><span class="dot" style="background:var(--${statusTone(st)})"></span><span>${esc(name)}</span>
       <span class="n ${er > 0.03 ? "bad" : ""}">${st === "down" ? "down" : Math.round(er * 100) + "%"}</span>
-      <span class="n ${p95 > 1000 ? "bad" : ""}">${Math.round(p95)} ms</span></div>`).join("")
-      : `<p class="empty">${empty}</p>`;
+      <span class="n ${p95 > 1000 ? "bad" : ""}">${Math.round(p95)} ms</span></div>`).join("");
   }
 
   /** Re-render the step list when it changed length, or the empty list when its message changed;
@@ -96,26 +82,5 @@ export class Stage {
   /** Forget the rendered step list, so the next steps() redraws it without the slide-in. */
   resetSteps(): void {
     this.shownSteps = -1;
-  }
-
-  report(html: string, meta: string): void {
-    byId("report-body").innerHTML = html;
-    byId("report-meta").textContent = meta;
-  }
-
-  openReport(open: boolean): void {
-    byId<HTMLDetailsElement>("report").open = open;
-  }
-
-  /** The live status line that takes the timeline's place; each part is trusted markup. */
-  liveStatus(parts: string[], bad: boolean): void {
-    this.liveStatusEl.classList.toggle("bad", bad);
-    this.liveStatusEl.innerHTML = parts.map((p) => `<span>${p}</span>`).join("");
-  }
-
-  /** Show the offline state over the graph area, or hide it with `null`. */
-  offline(error: string | null): void {
-    this.offlineEl.hidden = error === null;
-    if (error !== null) byId("offline-error").textContent = error;
   }
 }
