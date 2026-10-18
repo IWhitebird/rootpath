@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/IWhitebird/rootpath"
+Homepage = "https://rootpath.iwhitebird.com"
 Repository = "https://github.com/IWhitebird/rootpath"
 
 [project.scripts]

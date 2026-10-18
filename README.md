@@ -6,7 +6,7 @@ failure from the alert to where it starts, fixes it, checks the fix, and remembe
 the coding agent you already use (a Claude Code plugin, or any MCP host such as Codex or Cursor), or
 on its own when an alert fires.
 
-**Live demo:** __LIVE_URL__ · **Demo video:** __VIDEO_URL__ ·
+**Live demo:** https://rootpath.iwhitebird.com · **Demo video:** __VIDEO_URL__ ·
 **Tracks:** Agents That Act on Connected Data · Agent Memory and Coordination
 (Graph Hacks: Context for AI Agents, WeMakeDevs × FalkorDB, October 2026)
 
@@ -151,7 +151,7 @@ cap. Only these validated tools and deterministic code write.
 ## Quickstart
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/IWhitebird/rootpath/main/web/public/install.sh | sh
+curl -fsSL https://rootpath.iwhitebird.com/install.sh | sh
 rootpath init                              # where your graph lives, a connection test, your agents
 ```
 
