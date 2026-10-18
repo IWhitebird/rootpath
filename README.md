@@ -1,13 +1,13 @@
-# Rootpath
+<p align="center"><img src="docs/logo.svg" width="72" height="72" alt=""></p>
 
-**The alert is never where the bug is.**
+<h1 align="center">Rootpath</h1>
+
+<p align="center"><b>The alert is never where the bug is.</b><br><a href="https://rootpath.iwhitebird.com">rootpath.iwhitebird.com</a></p>
 
 Rootpath is an incident agent that reasons over a FalkorDB graph of your services, deploys, feature
 flags, owners and past incidents. It follows a failure from the alert to where it starts, fixes it,
 checks the fix, and remembers. It runs inside the agent you already use: Claude Code, Codex, Cursor
 or any MCP host.
-
-[Website](https://rootpath.iwhitebird.com)
 
 ![A recorded incident: the agent follows the graph from the alerting frontend three hops down to a feature flag, turns it off, verifies and remembers](docs/replay.gif)
 
