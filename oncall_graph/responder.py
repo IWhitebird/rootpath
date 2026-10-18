@@ -15,7 +15,7 @@ from . import config, infra, store
 RUNS = config.ROOT / ".oncall" / "runs"
 
 
-def mcp_config(mode: str, investigation_id: str) -> str:
+def mcp_config(mode: str, investigation_id: str, autonomy: str = "auto") -> str:
     path = config.ROOT / ".oncall" / f"mcp-{mode}-{investigation_id}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     env = {"ONCALL_MODE": mode, "ONCALL_INVESTIGATION_ID": investigation_id, "ONCALL_AGENT": f"headless-{mode}",
@@ -23,6 +23,8 @@ def mcp_config(mode: str, investigation_id: str) -> str:
            "FALKORDB_URL": os.environ.get("FALKORDB_URL", f"redis://{config.FALKORDB_HOST}:{config.FALKORDB_PORT}")}
     if config.NOTIFY_WEBHOOK:
         env["ONCALL_NOTIFY_WEBHOOK"] = config.NOTIFY_WEBHOOK
+    if autonomy == "propose" or not config.ALLOW_ACTIONS:
+        env["ONCALL_ALLOW_ACTIONS"] = "0"  # enforced by the server, not just asked of the model
     path.write_text(json.dumps({"mcpServers": {"oncall": {
         "command": shutil.which("uv") or "uv",
         "args": ["run", "--quiet", "--directory", str(config.ROOT), "oncall-graph", "mcp", "--mode", mode],
@@ -55,7 +57,7 @@ def run_agent(alert_service: str, alert: dict, mode: str = "graph", autonomy: st
     if autonomy == "propose":
         prompt += " You are in PROPOSE mode: only call actions with dry_run=true and recommend the fix."
     system = config.ROOT / "prompts" / ("oncall-agent.md" if mode == "graph" else "oncall-agent-baseline.md")
-    cmd = ["claude", "-p", prompt, "--mcp-config", mcp_config(mode, inv), "--strict-mcp-config",
+    cmd = ["claude", "-p", prompt, "--mcp-config", mcp_config(mode, inv, autonomy), "--strict-mcp-config",
            "--tools", "", "--allowedTools", "mcp__oncall__*", "--permission-mode", "dontAsk",
            "--max-turns", str(max_turns), "--output-format", "stream-json", "--verbose",
            "--append-system-prompt-file", str(system)]

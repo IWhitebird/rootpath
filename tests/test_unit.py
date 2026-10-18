@@ -133,3 +133,12 @@ def test_tool_annotations_mark_actions_destructive():
     tools_by_name = {t.name: t for t in asyncio.run(build("graph").list_tools())}
     assert tools_by_name["rollback_service"].annotations.destructiveHint is True
     assert tools_by_name["rank_suspects"].annotations.readOnlyHint is True
+
+
+def test_propose_mode_disables_actions_in_the_server(tmp_path, monkeypatch):
+    from oncall_graph import responder
+    monkeypatch.setattr(config, "ROOT", tmp_path)
+    auto = json.loads(open(responder.mcp_config("graph", "inv-test", "auto")).read())
+    propose = json.loads(open(responder.mcp_config("graph", "inv-test", "propose")).read())
+    assert "ONCALL_ALLOW_ACTIONS" not in auto["mcpServers"]["oncall"]["env"]
+    assert propose["mcpServers"]["oncall"]["env"]["ONCALL_ALLOW_ACTIONS"] == "0"

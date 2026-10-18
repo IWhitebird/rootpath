@@ -226,7 +226,7 @@ Pushing to GitHub publishes it through GitHub Pages; set *Settings → Pages →
 ## Tests
 
 ```bash
-uv run pytest tests/test_unit.py          # 16 fast tests, no Docker needed (also run in CI)
+uv run pytest tests/test_unit.py          # 17 fast tests, no Docker needed (also run in CI)
 uv run pytest tests/test_integration.py   # 14 end-to-end tests against the live demo stack (~7 min)
 ```
 
