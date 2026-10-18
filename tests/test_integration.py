@@ -2,8 +2,8 @@
 take the fix through the real action tools, verify recovery and incident memory."""
 import pytest
 
-from oncall_graph import config, infra, store, tools
-from oncall_graph.cli import inject as inject_scenario
+from rootpath import config, infra, store, tools
+from rootpath.cli import inject as inject_scenario
 
 from .conftest import wait_for_alert
 
@@ -122,7 +122,7 @@ def test_blast_radius_and_paths(stack):
 
 def test_web_api(stack):
     from fastapi.testclient import TestClient
-    from oncall_graph.web import app
+    from rootpath.web import app
     c = TestClient(app)
     assert c.get("/").status_code == 200
     g = c.get("/api/graph").json()

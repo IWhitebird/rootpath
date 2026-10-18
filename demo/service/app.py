@@ -1,4 +1,4 @@
-"""A tiny configurable microservice for the On-Call Graph demo stack.
+"""A tiny configurable microservice for the Rootpath demo stack.
 
 Every service in the demo runs this same file; its behaviour comes from env vars:
   SERVICE_NAME     name of the service

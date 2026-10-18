@@ -1,11 +1,11 @@
 {
-  "description": "oncall-graph safety guard: no real remediation without a prior dry run, nothing during a change freeze",
+  "description": "rootpath safety guard: no real remediation without a prior dry run, nothing during a change freeze",
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "mcp__(plugin_oncall-graph_)?oncall__(rollback_service|restart_service|set_feature_flag)",
+        "matcher": "mcp__(plugin_rootpath_)?oncall__(rollback_service|restart_service|set_feature_flag)",
         "hooks": [
-          { "type": "command", "command": "uv run --quiet --directory \"${CLAUDE_PLUGIN_ROOT}\" python -m oncall_graph.guard", "timeout": 20 }
+          { "type": "command", "command": "uv run --quiet --directory \"${CLAUDE_PLUGIN_ROOT}\" python -m rootpath.guard", "timeout": 20 }
         ]
       }
     ]

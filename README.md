@@ -1,11 +1,14 @@
-# On-Call Graph
+# Rootpath
 
-**An incident agent that reasons over a FalkorDB graph, fixes the problem, and remembers.**
-It plugs into the coding agent you already use (Claude Code, Codex, Cursor) over MCP, or runs
-on its own when an alert fires.
+**The alert is never where the bug is.** Rootpath is an incident agent that reasons over a
+FalkorDB graph of your services, deploys, feature flags, owners and past incidents. It follows the
+failure from the alert to where it starts, fixes it, checks the fix, and remembers. It plugs into the
+coding agent you already use (Claude Code, Codex, Cursor) over MCP, or runs on its own when an alert fires.
 
 > Graph Hacks: Context for AI Agents (WeMakeDevs × FalkorDB, Oct 2026)
 > **Tracks:** 01 Agents That Act on Connected Data (primary) · 02 Agent Memory and Coordination
+>
+> **Website with live replays:** https://iwhitebird.github.io/rootpath/ · **Demo video:** _link_
 
 ![A recorded incident: the agent follows the graph from the alerting frontend three hops down to a feature flag, turns it off, verifies and remembers](docs/replay.gif)
 
@@ -71,11 +74,11 @@ done in 45s · 9 tool calls
 ```
 ┌──────────────────────────── AGENT HOSTS (the brain) ─────────────────────────────┐
 │ Claude Code + plugin      Codex CLI        Cursor / VS Code     Headless responder │
-│ /oncall /blast-radius     config.toml      mcp.json             `oncall-graph watch`│
+│ /oncall /blast-radius     config.toml      mcp.json             `rootpath watch`│
 │ /postmortem + guard hook  + AGENTS.md                           → claude -p         │
 └────────────┬─────────────────┬────────────────┬──────────────────────┬────────────┘
              └─────────────────┴──── MCP (stdio) ┴──────────────────────┘
-┌──────────────────────────── oncall-graph MCP server ─────────────────────────────┐
+┌──────────────────────────── rootpath MCP server ─────────────────────────────┐
 │ READ        get_service_health · get_logs · get_blast_radius · recent_changes      │
 │             get_owner · find_similar_incidents · explain_incident · query_graph    │
 │ REASON      rank_suspects (traversal + betweenness) · trace_dependency_path (SPpaths)│
@@ -106,17 +109,17 @@ There's no hosted copy of the stack, because the agent controls real Docker cont
 is the hosted part: it replays recorded real incidents in the browser.
 
 ```bash
-git clone <this repo> oncall-graph && cd oncall-graph
+git clone <this repo> rootpath && cd rootpath
 uv sync
-uv run oncall-graph demo up        # FalkorDB :6380 (browser :3005), 7 services, load generator, seeded history
-uv run oncall-graph ui             # http://localhost:7100
+uv run rootpath demo up        # FalkorDB :6380 (browser :3005), 7 services, load generator, seeded history
+uv run rootpath ui             # http://localhost:7100
 ```
 
 Break something and let the agent fix it:
 
 ```bash
-uv run oncall-graph chaos flag     # or: bad-deploy | pool
-uv run oncall-graph watch --once   # alert fires → headless Claude Code investigates, fixes, verifies
+uv run rootpath chaos flag     # or: bad-deploy | pool
+uv run rootpath watch --once   # alert fires → headless Claude Code investigates, fixes, verifies
 ```
 
 Or do it all from the console at http://localhost:7100:
@@ -130,7 +133,7 @@ node for its properties. The **Incident memory** tab shows every incident with i
 and compares mean time to resolve for humans and the agent. **Changes** lists recent deploys and flag flips.
 
 **Reset** restores a healthy state but keeps the graph, so the next incident can find the memory
-the last one wrote. Shift-click Reset for a fresh graph, or run `uv run oncall-graph demo reset`.
+the last one wrote. Shift-click Reset for a fresh graph, or run `uv run rootpath demo reset`.
 
 | Scenario | What happens | Correct fix | Red herring |
 |---|---|---|---|
@@ -140,16 +143,16 @@ the last one wrote. Shift-click Reset for a fresh graph, or run `uv run oncall-g
 
 ## Use it from your agent
 
-**Claude Code (plugin):** MCP server, `/oncall-graph:oncall`, `/oncall-graph:blast-radius`, `/oncall-graph:postmortem`, plus the safety hook.
+**Claude Code (plugin):** MCP server, `/rootpath:oncall`, `/rootpath:blast-radius`, `/rootpath:postmortem`, plus the safety hook.
 
 ```bash
-/plugin marketplace add <owner>/oncall-graph
-/plugin install oncall-graph@oncall-graph
+/plugin marketplace add IWhitebird/rootpath
+/plugin install rootpath@rootpath
 # or, from a clone:
-claude --plugin-dir /path/to/oncall-graph
+claude --plugin-dir /path/to/rootpath
 ```
 
-Then type `/oncall-graph:oncall checkout is throwing 500s`. Read tools are pre-approved. Real actions
+Then type `/rootpath:oncall checkout is throwing 500s`. Read tools are pre-approved. Real actions
 go through Claude Code's permission prompt (human in the loop), and the guard hook denies any
 real action that wasn't dry-run first, or anything at all during a change freeze (`touch .oncall/FREEZE`).
 
@@ -158,22 +161,22 @@ real action that wasn't dry-run first, or anything at all during a change freeze
 ```toml
 [mcp_servers.oncall]
 command = "uv"
-args = ["run", "--quiet", "--directory", "/abs/path/to/oncall-graph", "oncall-graph", "mcp"]
+args = ["run", "--quiet", "--directory", "/abs/path/to/rootpath", "rootpath", "mcp"]
 [mcp_servers.oncall.env]
 FALKORDB_URL = "redis://localhost:6380"
 ```
 
 **Cursor / VS Code / any MCP host:** the same server, as a stdio command:
-`uv run --directory /abs/path/to/oncall-graph oncall-graph mcp`.
+`uv run --directory /abs/path/to/rootpath rootpath mcp`.
 
-**Headless / autonomous:** `uv run oncall-graph watch` polls health. When a user-facing service fails
+**Headless / autonomous:** `uv run rootpath watch` polls health. When a user-facing service fails
 twice in a row, it launches `claude -p` with only the oncall MCP tools (`--strict-mcp-config --tools ""`)
 and stores the run (tool calls, tokens, cost, report) on the `Investigation` node.
 Use `--autonomy propose` for dry-run-only recommendations.
 
 ## Does the graph matter? (benchmark)
 
-`uv run oncall-graph bench` injects each failure into the live stack and runs the same headless
+`uv run rootpath bench` injects each failure into the live stack and runs the same headless
 agent (Claude Opus 5.5 through Claude Code) twice, with the same remediation actions both times:
 
 - **graph** gets the FalkorDB reasoning and memory tools.
@@ -216,7 +219,7 @@ other remediation action. Per-scenario tables and every tool sequence:
 
 ## Website and incident replays
 
-`uv run oncall-graph record <scenario> --out site/data/<scenario>.json` records a real incident end
+`uv run rootpath record <scenario> --out site/data/<scenario>.json` records a real incident end
 to end: live health every second, every graph node and edge as it appears, and every agent step
 with its timestamp and the nodes it touched. `python3 site/build.py` inlines the recordings and the
 benchmark results into one self-contained `site/index.html`. The page replays the incidents in the
@@ -327,7 +330,7 @@ OPTIONAL MATCH (i)-[:ROOT_CAUSE]->(rc) OPTIONAL MATCH (i)-[:RESOLVED_BY]->(a:Act
 RETURN i, collect(rc), collect(a)
 ```
 
-The safety guard (`oncall_graph/guard.py`) is itself a graph query: no real action unless a matching dry run exists.
+The safety guard (`rootpath/guard.py`) is itself a graph query: no real action unless a matching dry run exists.
 
 ```cypher
 MATCH (a:Action {kind: $kind, target: $target, dry_run: true}) WHERE a.at >= $since RETURN count(a)
@@ -351,13 +354,13 @@ MATCH (a:Action {kind: $kind, target: $target, dry_run: true}) WHERE a.at >= $si
   commercial AI SRE. They are closed and tied to their own platform.
 - **Resolve.ai, Cleric, Traversal:** AI SRE startups.
 
-On-Call Graph is open, self-hosted, uses FalkorDB as the reasoning substrate rather than as storage,
+Rootpath is open, self-hosted, uses FalkorDB as the reasoning substrate rather than as storage,
 acts and verifies, remembers, and runs inside whichever agent you already use.
 
 ## Project layout
 
 ```
-oncall_graph/   tools.py (agent tools) · mcp_server.py · ingest.py · seed.py · infra.py · responder.py
+rootpath/   tools.py (agent tools) · mcp_server.py · ingest.py · seed.py · infra.py · responder.py
                 bench.py · record.py · web.py · guard.py · store.py · cli.py
 demo/           docker-compose.yml · service/ (one configurable microservice) · teams.json · runbooks/ · flags/
 skills/         oncall · blast-radius · postmortem (Claude Code plugin skills)
@@ -375,16 +378,16 @@ docs/           DEMO_SCRIPT.md · BLOG.md · SUBMISSION.md · screenshots
 
 | command | what it does |
 |---|---|
-| `oncall-graph demo up / down / reset [--soft]` | run, stop or reset the demo stack |
-| `oncall-graph chaos <scenario>` | inject a failure (`bad-deploy`, `flag`, `pool`, `deploy-noise`, `flag-collision`, `pool-after-deploy`) |
-| `oncall-graph status` | live health table |
-| `oncall-graph ui` | operator console on :7100 |
-| `oncall-graph mcp [--mode graph\|baseline]` | MCP server on stdio |
-| `oncall-graph watch [--once] [--autonomy propose]` | alert watcher that launches the headless agent |
-| `oncall-graph bench [--scenario ...] [--repeats N]` | graph vs baseline benchmark |
-| `oncall-graph record <scenario> --out file.json` | record an incident for the website |
-| `oncall-graph call <tool> key=value ...` | call any agent tool directly |
-| `oncall-graph sync` | rebuild the graph from its sources |
+| `rootpath demo up / down / reset [--soft]` | run, stop or reset the demo stack |
+| `rootpath chaos <scenario>` | inject a failure (`bad-deploy`, `flag`, `pool`, `deploy-noise`, `flag-collision`, `pool-after-deploy`) |
+| `rootpath status` | live health table |
+| `rootpath ui` | operator console on :7100 |
+| `rootpath mcp [--mode graph\|baseline]` | MCP server on stdio |
+| `rootpath watch [--once] [--autonomy propose]` | alert watcher that launches the headless agent |
+| `rootpath bench [--scenario ...] [--repeats N]` | graph vs baseline benchmark |
+| `rootpath record <scenario> --out file.json` | record an incident for the website |
+| `rootpath call <tool> key=value ...` | call any agent tool directly |
+| `rootpath sync` | rebuild the graph from its sources |
 
 ## AI assistance disclosure
 

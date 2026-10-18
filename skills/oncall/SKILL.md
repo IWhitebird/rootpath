@@ -1,8 +1,8 @@
 ---
 name: oncall
-description: Investigate and resolve a production incident using the oncall-graph tools (dependency graph, recent changes, incident memory, safe remediation). Use when the user reports an outage, errors, latency, a failing service or an alert.
+description: Investigate and resolve a production incident using the rootpath tools (dependency graph, recent changes, incident memory, safe remediation). Use when the user reports an outage, errors, latency, a failing service or an alert.
 argument-hint: "<symptom, e.g. 'checkout is throwing 500s'>"
-allowed-tools: mcp__plugin_oncall-graph_oncall__get_service_health mcp__plugin_oncall-graph_oncall__rank_suspects mcp__plugin_oncall-graph_oncall__get_logs mcp__plugin_oncall-graph_oncall__find_similar_incidents mcp__plugin_oncall-graph_oncall__get_blast_radius mcp__plugin_oncall-graph_oncall__recent_changes mcp__plugin_oncall-graph_oncall__trace_dependency_path mcp__plugin_oncall-graph_oncall__get_owner mcp__plugin_oncall-graph_oncall__explain_incident mcp__plugin_oncall-graph_oncall__query_graph mcp__plugin_oncall-graph_oncall__verify_recovery
+allowed-tools: mcp__plugin_rootpath_oncall__get_service_health mcp__plugin_rootpath_oncall__rank_suspects mcp__plugin_rootpath_oncall__get_logs mcp__plugin_rootpath_oncall__find_similar_incidents mcp__plugin_rootpath_oncall__get_blast_radius mcp__plugin_rootpath_oncall__recent_changes mcp__plugin_rootpath_oncall__trace_dependency_path mcp__plugin_rootpath_oncall__get_owner mcp__plugin_rootpath_oncall__explain_incident mcp__plugin_rootpath_oncall__query_graph mcp__plugin_rootpath_oncall__verify_recovery
 ---
 The user reports: $ARGUMENTS
 

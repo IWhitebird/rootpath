@@ -1,6 +1,6 @@
 # AGENTS.md: on-call playbook for Codex and other MCP agents
 
-This repo ships an MCP server (`uv run oncall-graph mcp`) with on-call tools backed by a FalkorDB
+This repo ships an MCP server (`uv run rootpath mcp`) with on-call tools backed by a FalkorDB
 graph of services, dependencies, owners, deploys, feature flags, runbooks and past incidents.
 
 When the user reports an outage, errors, latency or an alert:
@@ -20,5 +20,5 @@ When the user reports an outage, errors, latency or an alert:
 Before a risky change, use `get_blast_radius`, `get_owner` and `recent_changes` for a pre-change check.
 For postmortems, use `explain_incident`.
 
-Development: `uv run oncall-graph demo up | reset | down`, `uv run oncall-graph chaos <scenario>`,
-`uv run oncall-graph call <tool> key=value ...` to call any tool directly.
+Development: `uv run rootpath demo up | reset | down`, `uv run rootpath chaos <scenario>`,
+`uv run rootpath call <tool> key=value ...` to call any tool directly.

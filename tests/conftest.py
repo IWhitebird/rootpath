@@ -5,7 +5,7 @@ import pytest
 
 def _stack_up() -> bool:
     try:
-        from oncall_graph import infra, store
+        from rootpath import infra, store
         store.query("RETURN 1")
         return infra.stats("frontend")["status"] != "down"
     except Exception:
@@ -14,17 +14,17 @@ def _stack_up() -> bool:
 
 @pytest.fixture(scope="session")
 def stack():
-    """The live demo stack (`oncall-graph demo up`). Integration tests skip without it."""
+    """The live demo stack (`rootpath demo up`). Integration tests skip without it."""
     if not _stack_up():
-        pytest.skip("demo stack not running (run `uv run oncall-graph demo up`)")
+        pytest.skip("demo stack not running (run `uv run rootpath demo up`)")
     return True
 
 
 @pytest.fixture
 def fresh(stack):
     """Hard reset before the test, so every scenario starts from the same healthy baseline."""
-    from oncall_graph.cli import reset
-    from oncall_graph.responder import detect
+    from rootpath.cli import reset
+    from rootpath.responder import detect
     reset()
     for _ in range(20):
         if detect() is None:
@@ -36,7 +36,7 @@ def fresh(stack):
 
 def wait_for_alert(timeout: float = 60):
     """Same rule as the watcher: two consecutive detections 5s apart; returns the second."""
-    from oncall_graph.responder import detect
+    from rootpath.responder import detect
     end, strikes = time.time() + timeout, 0
     while time.time() < end:
         hit = detect()

@@ -2,7 +2,7 @@
 name: blast-radius
 description: Before changing or deploying a service, show what depends on it, who to notify, what changed around it recently and what broke last time. Use when the user is about to ship, change, restart or deprecate a service.
 argument-hint: "<service>"
-allowed-tools: mcp__plugin_oncall-graph_oncall__get_blast_radius mcp__plugin_oncall-graph_oncall__get_owner mcp__plugin_oncall-graph_oncall__recent_changes mcp__plugin_oncall-graph_oncall__find_similar_incidents mcp__plugin_oncall-graph_oncall__get_service_health
+allowed-tools: mcp__plugin_rootpath_oncall__get_blast_radius mcp__plugin_rootpath_oncall__get_owner mcp__plugin_rootpath_oncall__recent_changes mcp__plugin_rootpath_oncall__find_similar_incidents mcp__plugin_rootpath_oncall__get_service_health
 ---
 Service: $ARGUMENTS
 

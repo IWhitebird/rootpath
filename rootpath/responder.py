@@ -27,7 +27,7 @@ def mcp_config(mode: str, investigation_id: str, autonomy: str = "auto") -> str:
         env["ONCALL_ALLOW_ACTIONS"] = "0"  # enforced by the server, not just asked of the model
     path.write_text(json.dumps({"mcpServers": {"oncall": {
         "command": shutil.which("uv") or "uv",
-        "args": ["run", "--quiet", "--directory", str(config.ROOT), "oncall-graph", "mcp", "--mode", mode],
+        "args": ["run", "--quiet", "--directory", str(config.ROOT), "rootpath", "mcp", "--mode", mode],
         "env": env}}}, indent=2))
     return str(path)
 

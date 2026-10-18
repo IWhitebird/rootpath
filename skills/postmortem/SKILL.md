@@ -2,7 +2,7 @@
 name: postmortem
 description: Write a blameless postmortem for an incident from the evidence stored in the oncall graph (timeline, root cause, actions, agent steps). Use when the user asks for a postmortem, incident report or RCA.
 argument-hint: "<incident id, e.g. INC-043>"
-allowed-tools: mcp__plugin_oncall-graph_oncall__explain_incident mcp__plugin_oncall-graph_oncall__find_similar_incidents mcp__plugin_oncall-graph_oncall__get_blast_radius mcp__plugin_oncall-graph_oncall__get_owner
+allowed-tools: mcp__plugin_rootpath_oncall__explain_incident mcp__plugin_rootpath_oncall__find_similar_incidents mcp__plugin_rootpath_oncall__get_blast_radius mcp__plugin_rootpath_oncall__get_owner
 ---
 Incident: $ARGUMENTS
 

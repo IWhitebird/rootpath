@@ -25,7 +25,7 @@ def decide(event: dict) -> tuple[str, str] | None:
         "MATCH (a:Action {kind: $kind, target: $target, dry_run: true}) WHERE a.at >= $since RETURN count(a) AS n",
         {"kind": kind, "target": args.get(key), "since": time.time() - 900})
     if not rows or rows[0]["n"] == 0:
-        return "deny", (f"oncall-graph guard: run {tool} with dry_run=true on '{args.get(key)}' first and review "
+        return "deny", (f"rootpath guard: run {tool} with dry_run=true on '{args.get(key)}' first and review "
                         "the plan; real actions need a recorded dry run from the last 15 minutes.")
     return None
 
@@ -35,7 +35,7 @@ def main() -> None:
     try:
         verdict = decide(event)
     except Exception as e:  # graph unreachable: fail closed for real actions
-        verdict = ("deny", f"oncall-graph guard could not reach FalkorDB ({type(e).__name__}); blocking real action.")
+        verdict = ("deny", f"rootpath guard could not reach FalkorDB ({type(e).__name__}); blocking real action.")
     if verdict:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
                                                  "permissionDecision": verdict[0],

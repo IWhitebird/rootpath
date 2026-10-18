@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 
 from . import config, infra, ingest, store
 
-app = FastAPI(title="On-Call Graph")
+app = FastAPI(title="Rootpath")
 UI = Path(__file__).resolve().parent.parent / "ui"
 _busy = {"task": None, "since": 0.0}
 

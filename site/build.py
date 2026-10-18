@@ -1,7 +1,7 @@
 """Build the project website: inline the recorded incident replays and the benchmark results
 into one self-contained HTML file (site/index.html, ready for GitHub Pages).
 
-    uv run python site/build.py [--repo https://github.com/<owner>/oncall-graph] [--artifact out.html]
+    uv run python site/build.py [--repo https://github.com/IWhitebird/rootpath] [--artifact out.html]
 """
 import argparse
 import json

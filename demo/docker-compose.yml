@@ -1,5 +1,5 @@
-# On-Call Graph demo stack: FalkorDB + 7 microservices + a load generator.
-# Started by `oncall-graph demo up` (which also writes env/*.env and flags/flags.json).
+# Rootpath demo stack: FalkorDB + 7 microservices + a load generator.
+# Started by `rootpath demo up` (which also writes env/*.env and flags/flags.json).
 name: oncall-demo
 
 x-service: &service

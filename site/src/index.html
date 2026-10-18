@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>On-Call Graph</title>
+<title>Rootpath</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="An incident agent that reasons over a FalkorDB graph of services, changes, owners and past incidents. It finds where a failure starts, fixes it, verifies the fix and remembers.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -244,14 +244,14 @@ footer { border-top: 1px solid var(--line); padding-block: 36px 48px; color: var
 <body>
 <div class="wrap">
   <header class="top">
-    <a class="brand" href="#top" aria-label="On-Call Graph home">
+    <a class="brand" href="#top" aria-label="Rootpath home">
       <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
         <circle cx="5" cy="6" r="3.2" fill="currentColor"/><circle cx="20" cy="6" r="3.2" fill="currentColor" opacity=".45"/>
         <circle cx="13" cy="13" r="3.2" fill="currentColor"/><circle cx="20" cy="20" r="3.6" fill="var(--bad)"/>
         <path d="M5 6 13 13 20 20M20 6 13 13" stroke="currentColor" stroke-width="1.6" fill="none" opacity=".55"/>
         <circle cx="20" cy="20" r="6.2" fill="none" stroke="var(--path)" stroke-width="1.6"/>
       </svg>
-      On-Call Graph
+      Rootpath
     </a>
     <nav aria-label="Sections">
       <a href="#how">How it works</a>
@@ -272,7 +272,7 @@ footer { border-top: 1px solid var(--line); padding-block: 36px 48px; color: var
           <h1>The alert is never where <span class="hl">the bug is.</span></h1>
         </div>
         <div class="hero-copy">
-          <p>On-Call Graph gives an AI agent a FalkorDB graph of your services, deploys, feature flags, owners and past incidents. It follows the failure to where it starts, fixes it, checks the fix, and remembers what happened.</p>
+          <p>Rootpath gives an AI agent a FalkorDB graph of your services, deploys, feature flags, owners and past incidents. It follows the failure to where it starts, fixes it, checks the fix, and remembers what happened.</p>
           <div class="cta">
             <a class="btn primary" href="#install">Install the plugin</a>
             <a class="btn" href="#how">How it reasons</a>
@@ -460,8 +460,8 @@ footer { border-top: 1px solid var(--line); padding-block: 36px 48px; color: var
 <footer>
   <div class="wrap foot">
     <div>
-      <p><b style="color:var(--ink)">On-Call Graph</b> was built for Graph Hacks: Context for AI Agents (WeMakeDevs × FalkorDB, October 2026). Apache-2.0.</p>
-      <p>Prior art: woodpecker-mcp also keeps a service graph in FalkorDB, with analysis only. AWS DevOps Agent, Datadog Bits AI SRE, Dynatrace and Causely use topology graphs inside their own platforms. On-Call Graph is open, self-hosted, acts and verifies, remembers, and runs inside the agent you already use.</p>
+      <p><b style="color:var(--ink)">Rootpath</b> was built for Graph Hacks: Context for AI Agents (WeMakeDevs × FalkorDB, October 2026). Apache-2.0.</p>
+      <p>Prior art: woodpecker-mcp also keeps a service graph in FalkorDB, with analysis only. AWS DevOps Agent, Datadog Bits AI SRE, Dynatrace and Causely use topology graphs inside their own platforms. Rootpath is open, self-hosted, acts and verifies, remembers, and runs inside the agent you already use.</p>
     </div>
     <div>
       <p>Built with Claude Code as a pair programmer. At runtime the agent is Claude, through Claude Code headless or any MCP host. No model training anywhere.</p>
@@ -815,20 +815,20 @@ benchSection();
 
 // ---------- install ----------
 const repo = CONFIG.repo || '';
-const repoSlug = esc(repo.replace(/^https:\/\/github\.com\//, '').replace(/\.git$/, '') || '<owner>/oncall-graph');
+const repoSlug = esc(repo.replace(/^https:\/\/github\.com\//, '').replace(/\.git$/, '') || 'IWhitebird/rootpath');
 if (repo) { const a = document.getElementById('repo-link'); a.href = repo; a.textContent = 'GitHub'; }
 const HOSTS = [
   { key: 'claude', title: 'Claude Code', sub: 'Plugin: MCP server, /oncall, /blast-radius, /postmortem, safety hook',
-    code: `<span class="c"># inside Claude Code</span>\n/plugin marketplace add ${repoSlug}\n/plugin install oncall-graph@oncall-graph\n\n<span class="c"># then</span>\n/oncall-graph:oncall checkout is throwing 500s`,
+    code: `<span class="c"># inside Claude Code</span>\n/plugin marketplace add ${repoSlug}\n/plugin install rootpath@rootpath\n\n<span class="c"># then</span>\n/rootpath:oncall checkout is throwing 500s`,
     note: 'Read tools are pre-approved. Real actions go through Claude Code\'s permission prompt, and the guard hook refuses any action that was not dry-run first, or anything during a change freeze.' },
   { key: 'codex', title: 'Codex CLI', sub: 'stdio MCP server in config.toml, playbook in AGENTS.md',
-    code: `<span class="c"># ~/.codex/config.toml</span>\n[mcp_servers.oncall]\ncommand = <span class="s">"uv"</span>\nargs = [<span class="s">"run"</span>, <span class="s">"--quiet"</span>, <span class="s">"--directory"</span>, <span class="s">"/abs/path/to/oncall-graph"</span>, <span class="s">"oncall-graph"</span>, <span class="s">"mcp"</span>]\n\n[mcp_servers.oncall.env]\nFALKORDB_URL = <span class="s">"redis://localhost:6380"</span>`,
+    code: `<span class="c"># ~/.codex/config.toml</span>\n[mcp_servers.oncall]\ncommand = <span class="s">"uv"</span>\nargs = [<span class="s">"run"</span>, <span class="s">"--quiet"</span>, <span class="s">"--directory"</span>, <span class="s">"/abs/path/to/rootpath"</span>, <span class="s">"rootpath"</span>, <span class="s">"mcp"</span>]\n\n[mcp_servers.oncall.env]\nFALKORDB_URL = <span class="s">"redis://localhost:6380"</span>`,
     note: 'The same 17 tools. The repository\'s AGENTS.md carries the incident playbook for Codex and other agents that read it.' },
   { key: 'cursor', title: 'Cursor, VS Code, any MCP host', sub: 'one stdio command',
-    code: `{\n  <span class="s">"mcpServers"</span>: {\n    <span class="s">"oncall"</span>: {\n      <span class="s">"command"</span>: <span class="s">"uv"</span>,\n      <span class="s">"args"</span>: [<span class="s">"run"</span>, <span class="s">"--directory"</span>, <span class="s">"/abs/path/to/oncall-graph"</span>, <span class="s">"oncall-graph"</span>, <span class="s">"mcp"</span>]\n    }\n  }\n}`,
+    code: `{\n  <span class="s">"mcpServers"</span>: {\n    <span class="s">"oncall"</span>: {\n      <span class="s">"command"</span>: <span class="s">"uv"</span>,\n      <span class="s">"args"</span>: [<span class="s">"run"</span>, <span class="s">"--directory"</span>, <span class="s">"/abs/path/to/rootpath"</span>, <span class="s">"rootpath"</span>, <span class="s">"mcp"</span>]\n    }\n  }\n}`,
     note: 'Tools carry MCP annotations: read-only tools are marked readOnlyHint, the three remediation tools destructiveHint, so hosts can ask before acting.' },
   { key: 'headless', title: 'Headless responder', sub: 'an alert starts the agent with no human present',
-    code: `git clone ${esc(repo || '<repo-url>')} oncall-graph && cd oncall-graph\nuv sync\nuv run oncall-graph demo up      <span class="c"># FalkorDB, 7 services, traffic, history</span>\nuv run oncall-graph ui           <span class="c"># dashboard on localhost:7100</span>\n\nuv run oncall-graph chaos flag   <span class="c"># break something</span>\nuv run oncall-graph watch        <span class="c"># alert -> claude -p with only the oncall tools</span>`,
+    code: `git clone ${esc(repo || '<repo-url>')} rootpath && cd rootpath\nuv sync\nuv run rootpath demo up      <span class="c"># FalkorDB, 7 services, traffic, history</span>\nuv run rootpath ui           <span class="c"># dashboard on localhost:7100</span>\n\nuv run rootpath chaos flag   <span class="c"># break something</span>\nuv run rootpath watch        <span class="c"># alert -> claude -p with only the oncall tools</span>`,
     note: 'The watcher pages on the most user-facing failing service, launches Claude Code headless with no shell, file or web tools, and stores the run on an Investigation node. --autonomy propose keeps it to dry runs.' },
 ];
 const hostsEl = document.getElementById('hosts');

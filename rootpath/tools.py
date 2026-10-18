@@ -582,7 +582,7 @@ def notify_owner(service: str, message: str, incident_id: str | None = None) -> 
     owner = get_owner(service)
     if "error" in owner:
         return owner
-    text = f"[{incident_id or 'oncall-graph'}] @{owner['on_call']} ({owner['channel']}): {message}"
+    text = f"[{incident_id or 'rootpath'}] @{owner['on_call']} ({owner['channel']}): {message}"
     delivered = "recorded in graph (no webhook configured)"
     if config.NOTIFY_WEBHOOK:
         try:

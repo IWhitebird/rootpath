@@ -1,15 +1,36 @@
 {
-  "name": "oncall-graph",
+  "name": "rootpath",
   "version": "0.1.0",
   "description": "Turn your coding agent into an on-call engineer: graph-powered incident diagnosis, safe remediation and incident memory on FalkorDB.",
-  "author": { "name": "Shreyas Patange" },
+  "author": {
+    "name": "Shreyas Patange",
+    "url": "https://github.com/IWhitebird"
+  },
   "license": "Apache-2.0",
-  "keywords": ["sre", "on-call", "incident-response", "falkordb", "knowledge-graph", "mcp"],
+  "homepage": "https://iwhitebird.github.io/rootpath/",
+  "repository": "https://github.com/IWhitebird/rootpath",
+  "keywords": [
+    "sre",
+    "on-call",
+    "incident-response",
+    "falkordb",
+    "knowledge-graph",
+    "mcp"
+  ],
   "mcpServers": {
     "oncall": {
       "command": "uv",
-      "args": ["run", "--quiet", "--directory", "${CLAUDE_PLUGIN_ROOT}", "oncall-graph", "mcp"],
-      "env": { "ONCALL_AGENT": "claude-code" }
+      "args": [
+        "run",
+        "--quiet",
+        "--directory",
+        "${CLAUDE_PLUGIN_ROOT}",
+        "rootpath",
+        "mcp"
+      ],
+      "env": {
+        "ONCALL_AGENT": "claude-code"
+      }
     }
   }
 }

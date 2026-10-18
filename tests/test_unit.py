@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from oncall_graph import config, guard, infra, store, tools
+from rootpath import config, guard, infra, store, tools
 
 
 def test_safe_read_appends_limit(monkeypatch):
@@ -29,7 +29,7 @@ def test_classify(stats, expected):
 
 
 def _event(tool, **args):
-    return {"tool_name": f"mcp__plugin_oncall-graph_oncall__{tool}", "tool_input": args}
+    return {"tool_name": f"mcp__plugin_rootpath_oncall__{tool}", "tool_input": args}
 
 
 def test_guard_allows_dry_runs_without_touching_graph(monkeypatch):
@@ -117,7 +117,7 @@ def test_health_view_hides_tracing_fields_in_basic_telemetry(monkeypatch):
 
 
 def test_mcp_tool_sets():
-    from oncall_graph.mcp_server import build
+    from rootpath.mcp_server import build
 
     def names(mode):
         return {t.name for t in asyncio.run(build(mode).list_tools())}
@@ -129,14 +129,14 @@ def test_mcp_tool_sets():
 
 
 def test_tool_annotations_mark_actions_destructive():
-    from oncall_graph.mcp_server import build
+    from rootpath.mcp_server import build
     tools_by_name = {t.name: t for t in asyncio.run(build("graph").list_tools())}
     assert tools_by_name["rollback_service"].annotations.destructiveHint is True
     assert tools_by_name["rank_suspects"].annotations.readOnlyHint is True
 
 
 def test_propose_mode_disables_actions_in_the_server(tmp_path, monkeypatch):
-    from oncall_graph import responder
+    from rootpath import responder
     monkeypatch.setattr(config, "ROOT", tmp_path)
     auto = json.loads(open(responder.mcp_config("graph", "inv-test", "auto")).read())
     propose = json.loads(open(responder.mcp_config("graph", "inv-test", "propose")).read())

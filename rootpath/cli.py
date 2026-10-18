@@ -1,4 +1,4 @@
-"""oncall-graph command line: run the demo stack, inject failures, serve MCP / UI, run the watcher."""
+"""rootpath command line: run the demo stack, inject failures, serve MCP / UI, run the watcher."""
 import argparse
 import json
 import subprocess
@@ -22,7 +22,7 @@ def demo_up(args) -> None:
     print("waiting for traffic ...")
     time.sleep(6)
     ingest.sync_health()
-    print("demo stack up. UI: `oncall-graph ui` -> http://localhost:7100   FalkorDB browser: http://localhost:3005")
+    print("demo stack up. UI: `rootpath ui` -> http://localhost:7100   FalkorDB browser: http://localhost:3005")
 
 
 def demo_down(args) -> None:
@@ -144,7 +144,7 @@ def mcp(args) -> None:
 
 def ui(args) -> None:
     import uvicorn
-    uvicorn.run("oncall_graph.web:app", host=args.host, port=args.port, log_level="warning")
+    uvicorn.run("rootpath.web:app", host=args.host, port=args.port, log_level="warning")
 
 
 def watch(args) -> None:
@@ -158,7 +158,7 @@ def bench(args) -> None:
 
 
 def call(args) -> None:
-    """Call a tool directly, e.g. `oncall-graph call rank_suspects symptom_service=frontend`."""
+    """Call a tool directly, e.g. `rootpath call rank_suspects symptom_service=frontend`."""
     import os
     os.environ.setdefault("ONCALL_INVESTIGATION_ID", "cli-debug")
     os.environ.setdefault("ONCALL_AGENT", "cli")
@@ -186,7 +186,7 @@ def _wait_for_db() -> None:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(prog="oncall-graph")
+    p = argparse.ArgumentParser(prog="rootpath")
     sub = p.add_subparsers(dest="cmd", required=True)
     d = sub.add_parser("demo", help="manage the demo stack").add_subparsers(dest="demo_cmd", required=True)
     d.add_parser("up").set_defaults(fn=demo_up)
@@ -222,7 +222,7 @@ def main() -> None:
     rec.add_argument("scenario", choices=list(SCENARIOS))
     rec.add_argument("--out", required=True)
     rec.add_argument("--mode", choices=["graph", "baseline"], default="graph")
-    rec.set_defaults(fn=lambda a: __import__("oncall_graph.record", fromlist=["record"]).record(a.scenario, a.out, a.mode))
+    rec.set_defaults(fn=lambda a: __import__("rootpath.record", fromlist=["record"]).record(a.scenario, a.out, a.mode))
     t = sub.add_parser("call", help="call a tool directly (debugging)")
     t.add_argument("tool")
     t.add_argument("kwargs", nargs="*")
