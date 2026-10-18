@@ -6,3 +6,6 @@ demo/flags/flags.json
 demo/state/
 bench/runs/
 .oncall/
+
+# built by site/build.py (and by the Pages workflow)
+site/index.html

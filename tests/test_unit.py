@@ -1,6 +1,8 @@
 """Fast tests with the graph and Docker mocked out."""
+
 import asyncio
 import json
+from pathlib import Path
 
 import pytest
 
@@ -17,13 +19,16 @@ def test_safe_read_appends_limit(monkeypatch):
     assert seen["q"].endswith("LIMIT 5") and "LIMIT 100" not in seen["q"]
 
 
-@pytest.mark.parametrize("stats,expected", [
-    ({"requests": 0, "error_rate": 0, "p95_ms": 0}, "idle"),
-    ({"requests": 50, "error_rate": 0.5, "p95_ms": 30}, "failing"),
-    ({"requests": 50, "error_rate": 0.05, "p95_ms": 30}, "degraded"),
-    ({"requests": 50, "error_rate": 0.0, "p95_ms": 2200}, "degraded"),
-    ({"requests": 50, "error_rate": 0.0, "p95_ms": 40}, "healthy"),
-])
+@pytest.mark.parametrize(
+    "stats,expected",
+    [
+        ({"requests": 0, "error_rate": 0, "p95_ms": 0}, "idle"),
+        ({"requests": 50, "error_rate": 0.5, "p95_ms": 30}, "failing"),
+        ({"requests": 50, "error_rate": 0.05, "p95_ms": 30}, "degraded"),
+        ({"requests": 50, "error_rate": 0.0, "p95_ms": 2200}, "degraded"),
+        ({"requests": 50, "error_rate": 0.0, "p95_ms": 40}, "healthy"),
+    ],
+)
 def test_classify(stats, expected):
     assert infra.classify(stats) == expected
 
@@ -57,8 +62,11 @@ def test_guard_change_freeze(monkeypatch):
 def test_guard_fails_closed_when_graph_is_down(monkeypatch, capsys):
     def boom(*a, **k):
         raise ConnectionError("down")
+
     monkeypatch.setattr(store, "read", boom)
-    monkeypatch.setattr("sys.stdin", __import__("io").StringIO(json.dumps(_event("rollback_service", service="p", dry_run=False))))
+    monkeypatch.setattr(
+        "sys.stdin", __import__("io").StringIO(json.dumps(_event("rollback_service", service="p", dry_run=False)))
+    )
     with pytest.raises(SystemExit):
         guard.main()
     out = json.loads(capsys.readouterr().out)
@@ -92,6 +100,7 @@ def test_fulltext_query_is_sanitized(monkeypatch):
         if "fulltext" in q:
             queries.append(params["q"])
         return []
+
     monkeypatch.setattr(store, "read", fake_read)
     monkeypatch.setattr(tools, "_trace", lambda *a, **k: None)
     tools.find_similar_incidents("fraud-check p95 2.3s; payment-service TIMEOUT timeout")
@@ -101,16 +110,40 @@ def test_fulltext_query_is_sanitized(monkeypatch):
 
 
 def test_change_line_formats():
-    deploy = {"id": "chg-1", "kind": "deploy", "service": "payment", "version": "2.4.1", "prev_version": "2.4.0",
-              "author": "riya", "at": 0, "iso": "x", "note": "refactor"}
-    flag = {"id": "chg-2", "kind": "flag", "_labels": ["Change", "FlagChange"], "flag": "f", "from": False, "to": True,
-            "author": "omar", "at": 0, "iso": "x"}
+    deploy = {
+        "id": "chg-1",
+        "kind": "deploy",
+        "service": "payment",
+        "version": "2.4.1",
+        "prev_version": "2.4.0",
+        "author": "riya",
+        "at": 0,
+        "iso": "x",
+        "note": "refactor",
+    }
+    flag = {
+        "id": "chg-2",
+        "kind": "flag",
+        "_labels": ["Change", "FlagChange"],
+        "flag": "f",
+        "from": False,
+        "to": True,
+        "author": "omar",
+        "at": 0,
+        "iso": "x",
+    }
     assert tools._change_line(deploy).startswith("chg-1: deploy payment v2.4.0 -> v2.4.1 by riya")
     assert tools._change_line(flag).startswith("chg-2: flag f False -> True by omar")
 
 
 def test_health_view_hides_tracing_fields_in_basic_telemetry(monkeypatch):
-    s = {"status": "failing", "error_rate": 0.5, "errors_originated_here": 3, "errors_from_dependencies": 1, "p95_ms": 1}
+    s = {
+        "status": "failing",
+        "error_rate": 0.5,
+        "errors_originated_here": 3,
+        "errors_from_dependencies": 1,
+        "p95_ms": 1,
+    }
     assert "errors_originated_here" in tools._health_view(s)
     monkeypatch.setattr(config, "TELEMETRY", "basic")
     assert not any(k.startswith("errors_") for k in tools._health_view(s))
@@ -121,15 +154,24 @@ def test_mcp_tool_sets():
 
     def names(mode):
         return {t.name for t in asyncio.run(build(mode).list_tools())}
+
     graph, baseline = names("graph"), names("baseline")
     assert {"rank_suspects", "find_similar_incidents", "open_incident", "resolve_incident"} <= graph
-    assert baseline == {"get_service_health", "get_logs", "list_changes_flat", "rollback_service",
-                        "restart_service", "set_feature_flag", "verify_recovery"}
+    assert baseline == {
+        "get_service_health",
+        "get_logs",
+        "list_changes_flat",
+        "rollback_service",
+        "restart_service",
+        "set_feature_flag",
+        "verify_recovery",
+    }
     assert not graph & {"list_changes_flat"}
 
 
 def test_tool_annotations_mark_actions_destructive():
     from rootpath.mcp_server import build
+
     tools_by_name = {t.name: t for t in asyncio.run(build("graph").list_tools())}
     assert tools_by_name["rollback_service"].annotations.destructiveHint is True
     assert tools_by_name["rank_suspects"].annotations.readOnlyHint is True
@@ -137,8 +179,9 @@ def test_tool_annotations_mark_actions_destructive():
 
 def test_propose_mode_disables_actions_in_the_server(tmp_path, monkeypatch):
     from rootpath import responder
+
     monkeypatch.setattr(config, "ROOT", tmp_path)
-    auto = json.loads(open(responder.mcp_config("graph", "inv-test", "auto")).read())
-    propose = json.loads(open(responder.mcp_config("graph", "inv-test", "propose")).read())
+    auto = json.loads(Path(responder.mcp_config("graph", "inv-test", "auto")).read_text())
+    propose = json.loads(Path(responder.mcp_config("graph", "inv-test", "propose")).read_text())
     assert "ONCALL_ALLOW_ACTIONS" not in auto["mcpServers"]["oncall"]["env"]
     assert propose["mcpServers"]["oncall"]["env"]["ONCALL_ALLOW_ACTIONS"] == "0"

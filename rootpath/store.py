@@ -1,4 +1,6 @@
 """Thin FalkorDB access layer: queries return plain dicts, never client objects."""
+
+import contextlib
 import re
 from typing import Any
 
@@ -36,7 +38,7 @@ def _plain(value: Any) -> Any:
 
 def _rows(result) -> list[dict]:
     names = [h[1] for h in result.header]
-    return [dict(zip(names, (_plain(v) for v in row))) for row in result.result_set]
+    return [dict(zip(names, (_plain(v) for v in row), strict=True)) for row in result.result_set]
 
 
 def query(cypher: str, params: dict | None = None) -> list[dict]:
@@ -61,7 +63,5 @@ def safe_read(cypher: str, max_rows: int = 100) -> list[dict]:
 
 
 def delete_graph() -> None:
-    try:
+    with contextlib.suppress(Exception):  # graph may not exist yet
         graph().delete()
-    except Exception:
-        pass

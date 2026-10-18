@@ -1,6 +1,7 @@
 """Everything that touches the running system: Docker Compose, service stats, logs,
 deploys, restarts and feature flags. The change log (state/changes.jsonl) plays the
 role of a CI/CD + flag-service audit trail; the graph is built from it."""
+
 import json
 import subprocess
 import time
@@ -89,6 +90,7 @@ def logs(service: str, tail: int = 60, since: str | None = None) -> str:
 
 # ---------- change log (deploys + flag flips) ----------
 
+
 def read_changes() -> list[dict]:
     if not CHANGES.exists():
         return []
@@ -106,6 +108,7 @@ def append_change(change: dict) -> dict:
 
 # ---------- deploys ----------
 
+
 def read_env(service: str) -> dict:
     path = ENV_DIR / f"{service}.env"
     if not path.exists():
@@ -118,14 +121,29 @@ def write_env(service: str, env: dict) -> None:
     (ENV_DIR / f"{service}.env").write_text("".join(f"{k}={v}\n" for k, v in env.items()))
 
 
-def deploy(service: str, version: str, bug: str = "", author: str = "ci", note: str = "",
-           rollback_of: str | None = None, at: float | None = None) -> dict:
+def deploy(
+    service: str,
+    version: str,
+    bug: str = "",
+    author: str = "ci",
+    note: str = "",
+    rollback_of: str | None = None,
+    at: float | None = None,
+) -> dict:
     """Ship `version` of `service`: rewrite its env file and recreate the container."""
     prev = read_env(service).get("VERSION")
     write_env(service, {"VERSION": version, "BUG": bug})
     compose("up", "-d", "--no-deps", service)
-    change = {"kind": "deploy", "service": service, "version": version, "prev_version": prev,
-              "bug": bug, "author": author, "note": note, "rollback_of": rollback_of}
+    change = {
+        "kind": "deploy",
+        "service": service,
+        "version": version,
+        "prev_version": prev,
+        "bug": bug,
+        "author": author,
+        "note": note,
+        "rollback_of": rollback_of,
+    }
     if at:
         change["at"] = at
     return append_change(change)
@@ -136,6 +154,7 @@ def restart(service: str) -> None:
 
 
 # ---------- feature flags ----------
+
 
 def read_flags() -> dict:
     try:
@@ -153,8 +172,17 @@ def set_flag(flag: str, value: bool, author: str = "unknown", note: str = "") ->
     prev = flags.get(flag)
     flags[flag] = value
     FLAGS_FILE.write_text(json.dumps(flags, indent=2))
-    return append_change({"kind": "flag", "flag": flag, "from": prev, "to": value, "author": author, "note": note,
-                          "services": flags_meta().get(flag, {}).get("affects", [])})
+    return append_change(
+        {
+            "kind": "flag",
+            "flag": flag,
+            "from": prev,
+            "to": value,
+            "author": author,
+            "note": note,
+            "services": flags_meta().get(flag, {}).get("affects", []),
+        }
+    )
 
 
 def chaos_pool_exhaust(service: str = "inventory") -> None:

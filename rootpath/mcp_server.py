@@ -1,8 +1,9 @@
 """MCP server exposing the on-call tools to any MCP host (Claude Code, Codex, Cursor, ...).
 
-  graph mode (default): graph reasoning tools + actions + incident memory, all on FalkorDB.
-  baseline mode: only what a plain observability stack gives you (health, logs, a flat change
-                 list) plus the same actions. Used to measure what the graph is worth."""
+graph mode (default): graph reasoning tools + actions + incident memory, all on FalkorDB.
+baseline mode: only what a plain observability stack gives you (health, logs, a flat change
+               list) plus the same actions. Used to measure what the graph is worth."""
+
 import logging
 import os
 
@@ -28,7 +29,9 @@ with the smallest safe action, and verify recovery."""
 
 
 def build(mode: str = "graph") -> FastMCP:
-    mcp = FastMCP("oncall", instructions=INSTRUCTIONS if mode == "graph" else BASELINE_INSTRUCTIONS, log_level="WARNING")
+    mcp = FastMCP(
+        "oncall", instructions=INSTRUCTIONS if mode == "graph" else BASELINE_INSTRUCTIONS, log_level="WARNING"
+    )
 
     def add(fn, annotations):
         mcp.add_tool(fn, name=fn.__name__, description=fn.__doc__, annotations=annotations)
@@ -36,8 +39,16 @@ def build(mode: str = "graph") -> FastMCP:
     add(tools.get_service_health, READ)
     add(tools.get_logs, READ)
     if mode == "graph":
-        for fn in (tools.rank_suspects, tools.get_blast_radius, tools.recent_changes, tools.trace_dependency_path,
-                   tools.get_owner, tools.find_similar_incidents, tools.explain_incident, tools.query_graph):
+        for fn in (
+            tools.rank_suspects,
+            tools.get_blast_radius,
+            tools.recent_changes,
+            tools.trace_dependency_path,
+            tools.get_owner,
+            tools.find_similar_incidents,
+            tools.explain_incident,
+            tools.query_graph,
+        ):
             add(fn, READ)
         for fn in (tools.open_incident, tools.notify_owner, tools.resolve_incident):
             add(fn, WRITE)

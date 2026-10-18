@@ -1,5 +1,7 @@
 """Steady synthetic traffic against the frontend (browse + checkout)."""
+
 import asyncio
+import contextlib
 import os
 
 import httpx
@@ -19,10 +21,8 @@ async def main() -> None:
 
 
 async def hit(client: httpx.AsyncClient, url: str) -> None:
-    try:
+    with contextlib.suppress(httpx.HTTPError):
         await client.get(url)
-    except httpx.HTTPError:
-        pass
 
 
 if __name__ == "__main__":

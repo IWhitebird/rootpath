@@ -1,8 +1,9 @@
-"""Build the project website: inline the recorded incident replays and the benchmark results
-into one self-contained HTML file (site/index.html, ready for GitHub Pages).
+"""Build the project website: inline the stylesheet, the script, the recorded incident replays and
+the benchmark results into one self-contained HTML file (site/index.html, ready for GitHub Pages).
 
     uv run python site/build.py [--repo https://github.com/IWhitebird/rootpath] [--artifact out.html]
 """
+
 import argparse
 import json
 import re
@@ -21,7 +22,7 @@ def bench(telemetry: str) -> list[dict]:
     for r in rows:
         tools = r.get("tools", [])
         r["diagnosis_calls"] = next((i for i, t in enumerate(tools) if t in ACTIONS), len(tools))
-        r["logs_read"] = tools[:r["diagnosis_calls"]].count("get_logs")
+        r["logs_read"] = tools[: r["diagnosis_calls"]].count("get_logs")
         r["clean"] = bool(r.get("correct_action")) and not r.get("wrong_actions")
         r.pop("tools", None)
     return rows
@@ -30,9 +31,11 @@ def bench(telemetry: str) -> list[dict]:
 def git_remote() -> str:
     """The GitHub URL of this checkout, if it has one (git@github.com:o/r.git -> https://github.com/o/r)."""
     import subprocess
+
     try:
-        url = subprocess.run(["git", "-C", str(ROOT), "config", "--get", "remote.origin.url"],
-                             capture_output=True, text=True).stdout.strip()
+        url = subprocess.run(
+            ["git", "-C", str(ROOT), "config", "--get", "remote.origin.url"], capture_output=True, text=True
+        ).stdout.strip()
     except OSError:
         return ""
     url = re.sub(r"^git@github\.com:", "https://github.com/", url)
@@ -55,7 +58,13 @@ def main() -> None:
     elif not config.get("repo"):
         config["repo"] = git_remote()
     replays = {p.stem: json.loads(p.read_text()) for p in sorted((SITE / "data").glob("*.json"))}
-    html = (SITE / "src" / "index.html").read_text()
+    src = SITE / "src"
+    html = (src / "index.html").read_text()
+    # One self-contained page: inline the stylesheet and the script next to the data.
+    html = html.replace(
+        '<link rel="stylesheet" href="site.css">', "<style>\n" + (src / "site.css").read_text() + "</style>"
+    )
+    html = html.replace('<script src="site.js"></script>', "<script>\n" + (src / "site.js").read_text() + "</script>")
     html = html.replace("/*__REPLAYS__*/", embed(replays))
     html = html.replace("/*__BENCH__*/", embed({"full": bench("full"), "basic": bench("basic")}))
     html = html.replace("/*__CONFIG__*/", embed(config))

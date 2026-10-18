@@ -1,10 +1,11 @@
 """Builds the graph from real sources: the compose file (services, owners, declared calls),
 live traffic stats (observed calls, health), teams.json, runbooks, flag metadata and the
 change log. Every sync is idempotent (MERGE on stable keys)."""
+
 import json
 import re
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from . import config, infra, store
 
@@ -23,7 +24,7 @@ INDEXES = [
 
 
 def iso(ts: float) -> str:
-    return datetime.fromtimestamp(ts, timezone.utc).isoformat(timespec="seconds")
+    return datetime.fromtimestamp(ts, UTC).isoformat(timespec="seconds")
 
 
 def ensure_schema() -> None:
@@ -63,8 +64,14 @@ def sync_health() -> dict:
             """MATCH (s:Service {name: $name})
                SET s.status = $status, s.error_rate = $error_rate, s.p95_ms = $p95,
                    s.version = $version, s.health_at = $now""",
-            {"name": name, "status": s["status"], "error_rate": s.get("error_rate", 1.0),
-             "p95": s.get("p95_ms", 0.0), "version": s.get("version", infra.read_env(name).get("VERSION")), "now": now},
+            {
+                "name": name,
+                "status": s["status"],
+                "error_rate": s.get("error_rate", 1.0),
+                "p95": s.get("p95_ms", 0.0),
+                "version": s.get("version", infra.read_env(name).get("VERSION")),
+                "now": now,
+            },
         )
         observed = {} if config.TELEMETRY == "basic" else (s.get("calls_total") or {})
         for dep, count in observed.items():  # observed call edges come from tracing data
@@ -96,7 +103,9 @@ def sync_teams() -> None:
             {"team": team["name"], "h": team["oncall"]},
         )
     for src, dst in data.get("escalation", {}).items():
-        store.query("MATCH (a:Team {name: $a}), (b:Team {name: $b}) MERGE (a)-[:ESCALATES_TO]->(b)", {"a": src, "b": dst})
+        store.query(
+            "MATCH (a:Team {name: $a}), (b:Team {name: $b}) MERGE (a)-[:ESCALATES_TO]->(b)", {"a": src, "b": dst}
+        )
 
 
 def sync_runbooks() -> None:
@@ -117,10 +126,17 @@ def sync_flags() -> None:
         store.query(
             """MERGE (f:Flag {name: $name}) SET f.description = $description, f.enabled = $enabled
                WITH f MATCH (t:Team {name: $team}) MERGE (t)-[:OWNS]->(f)""",
-            {"name": name, "description": meta["description"], "enabled": bool(current.get(name)), "team": meta["team"]},
+            {
+                "name": name,
+                "description": meta["description"],
+                "enabled": bool(current.get(name)),
+                "team": meta["team"],
+            },
         )
         for svc in meta["affects"]:
-            store.query("MATCH (f:Flag {name: $f}), (s:Service {name: $s}) MERGE (f)-[:AFFECTS]->(s)", {"f": name, "s": svc})
+            store.query(
+                "MATCH (f:Flag {name: $f}), (s:Service {name: $s}) MERGE (f)-[:AFFECTS]->(s)", {"f": name, "s": svc}
+            )
 
 
 def sync_changes() -> int:
@@ -128,7 +144,13 @@ def sync_changes() -> int:
     known = {r["id"] for r in store.query("MATCH (c:Change) RETURN c.id AS id")}
     new = [c for c in infra.read_changes() if c["id"] not in known]
     for c in new:
-        base = {"id": c["id"], "at": c["at"], "iso": iso(c["at"]), "author": c.get("author", "unknown"), "note": c.get("note", "")}
+        base = {
+            "id": c["id"],
+            "at": c["at"],
+            "iso": iso(c["at"]),
+            "author": c.get("author", "unknown"),
+            "note": c.get("note", ""),
+        }
         if c["kind"] == "deploy":
             store.query(
                 """MERGE (d:Change:Deploy {id: $id})
@@ -139,8 +161,10 @@ def sync_changes() -> int:
                 {**base, "service": c["service"], "version": c["version"], "prev_version": c.get("prev_version")},
             )
             if c.get("rollback_of"):
-                store.query("MATCH (a:Deploy {id: $a}), (b:Deploy {id: $b}) MERGE (a)-[:ROLLED_BACK]->(b)",
-                            {"a": c["id"], "b": c["rollback_of"]})
+                store.query(
+                    "MATCH (a:Deploy {id: $a}), (b:Deploy {id: $b}) MERGE (a)-[:ROLLED_BACK]->(b)",
+                    {"a": c["id"], "b": c["rollback_of"]},
+                )
         else:
             store.query(
                 """MERGE (x:Change:FlagChange {id: $id})

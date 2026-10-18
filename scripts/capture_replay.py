@@ -2,6 +2,7 @@
 
     uv run --with websocket-client python scripts/capture_replay.py <url> <out_dir> [seconds] [fps]
 Then encode with ffmpeg (see scripts/make_media.sh)."""
+
 import base64
 import json
 import subprocess
@@ -19,9 +20,22 @@ out.mkdir(parents=True, exist_ok=True)
 for f in out.glob("*.png"):
     f.unlink()
 
-chrome = subprocess.Popen(["google-chrome", "--headless=new", "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
-                           "--remote-debugging-port=9333", "--remote-allow-origins=*", "--window-size=1440,1000", "--user-data-dir=/tmp/oncall-capture-profile",
-                           "about:blank"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+chrome = subprocess.Popen(
+    [
+        "google-chrome",
+        "--headless=new",
+        "--no-sandbox",
+        "--disable-gpu",
+        "--hide-scrollbars",
+        "--remote-debugging-port=9333",
+        "--remote-allow-origins=*",
+        "--window-size=1440,1000",
+        "--user-data-dir=/tmp/oncall-capture-profile",
+        "about:blank",
+    ],
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+)
 try:
     for _ in range(50):
         try:
@@ -45,8 +59,11 @@ try:
     cdp("Emulation.setDeviceMetricsOverride", width=1440, height=1000, deviceScaleFactor=1, mobile=False)
     cdp("Page.navigate", url=url)
     time.sleep(2.5)
-    rect = cdp("Runtime.evaluate", expression="JSON.stringify(document.getElementById('replay').getBoundingClientRect())",
-               returnByValue=True)["result"]["value"]
+    rect = cdp(
+        "Runtime.evaluate",
+        expression="JSON.stringify(document.getElementById('replay').getBoundingClientRect())",
+        returnByValue=True,
+    )["result"]["value"]
     r = json.loads(rect)
     clip = {"x": r["x"], "y": r["y"], "width": r["width"], "height": r["height"], "scale": 1}
     cdp("Runtime.evaluate", expression="document.getElementById('restart').click()")

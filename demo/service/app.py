@@ -9,13 +9,14 @@ Every service in the demo runs this same file; its behaviour comes from env vars
   OPTIONAL_CALLS   downstreams whose failure is tolerated
   FLAG_LATENCY     feature flags that add latency, e.g. "fraud_model_v2=2200"
 """
+
 import asyncio
 import json
 import os
 import random
 import time
 from collections import Counter, deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 from fastapi import FastAPI
@@ -52,7 +53,7 @@ class OwnError(Exception):
 
 
 def log(level: str, msg: str) -> None:
-    ts = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+    ts = datetime.now(UTC).isoformat(timespec="milliseconds")
     print(f"{ts} {level:<5} [{NAME} v{VERSION}] {msg}", flush=True)
 
 
@@ -149,7 +150,7 @@ def stats(window: float = 20.0):
     own = sum(1 for r in errors if r[3] == "own")
     latencies = sorted(r[2] for r in recent)
     calls: dict = {}
-    for ts, dep, ok, lat in calls_log:
+    for ts, dep, ok, _latency in calls_log:
         if now - ts <= window:
             c = calls.setdefault(dep, {"count": 0, "errors": 0})
             c["count"] += 1

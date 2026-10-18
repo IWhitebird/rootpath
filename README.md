@@ -12,12 +12,11 @@ coding agent you already use (Claude Code, Codex, Cursor) over MCP, or runs on i
 
 ![A recorded incident: the agent follows the graph from the alerting frontend three hops down to a feature flag, turns it off, verifies and remembers](docs/replay.gif)
 
-*A real recorded run, replayed by the project website: fraud-check gets slow after a flag flip,
-frontend alerts, and the agent follows the graph three hops down. It rules out a coincidental
-deploy, recalls the matching past incident, turns the flag off, verifies recovery, pages the owner
-and stores the incident. The website is [`site/index.html`](site/index.html): self-contained, it runs
-from disk and is published to GitHub Pages by `.github/workflows/pages.yml`.
-[`docs/replay.mp4`](docs/replay.mp4) is the same clip as video.*
+*A real recorded run, replayed by the [project website](https://iwhitebird.github.io/rootpath/):
+fraud-check gets slow after a flag flip, frontend alerts, and the agent follows the graph three hops
+down. It rules out a coincidental deploy, recalls the matching past incident, turns the flag off,
+verifies recovery, pages the owner and stores the incident. [`docs/replay.mp4`](docs/replay.mp4) is
+the same clip as video.*
 
 ![The operator console mid-incident](docs/screenshot.png)
 
@@ -222,7 +221,7 @@ other remediation action. Per-scenario tables and every tool sequence:
 `uv run rootpath record <scenario> --out site/data/<scenario>.json` records a real incident end
 to end: live health every second, every graph node and edge as it appears, and every agent step
 with its timestamp and the nodes it touched. `python3 site/build.py` inlines the recordings and the
-benchmark results into one self-contained `site/index.html`. The page replays the incidents in the
+benchmark results into one self-contained `site/index.html` (a build output, not committed). The page replays the incidents in the
 browser with a scrubbable timeline, so anyone can watch the agent work without Docker or an API key.
 Pushing to GitHub publishes it through GitHub Pages; set *Settings → Pages → Source* to *GitHub Actions* once.
 
@@ -367,11 +366,11 @@ skills/         oncall · blast-radius · postmortem (Claude Code plugin skills)
 hooks/          hooks.json (PreToolUse guard)
 .claude-plugin/ plugin.json (MCP server inline) · marketplace.json
 prompts/        headless agent playbooks
-ui/             index.html (operator console)
-site/           src/index.html (website) · data/ (recorded incidents) · build.py
+ui/             index.html · console.js · console.css (operator console)
+site/           src/ (website: index.html · site.js · site.css) · data/ (recorded incidents) · build.py
 bench/          results-*.json and RESULTS-*.md (graph vs baseline)
 tests/          test_unit.py · test_integration.py
-docs/           DEMO_SCRIPT.md · BLOG.md · SUBMISSION.md · screenshots
+docs/           screenshots, replay.gif / replay.mp4
 ```
 
 ### CLI

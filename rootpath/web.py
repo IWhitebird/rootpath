@@ -1,4 +1,5 @@
 """Web UI + JSON API: the live graph, the agent's investigation path, and demo controls."""
+
 import threading
 import time
 from pathlib import Path
@@ -12,8 +13,16 @@ app = FastAPI(title="Rootpath")
 UI = Path(__file__).resolve().parent.parent / "ui"
 _busy = {"task": None, "since": 0.0}
 
-KEY = {"Service": "name", "Team": "name", "Person": "handle", "Flag": "name", "Change": "id",
-       "Incident": "id", "Action": "id", "Runbook": "id"}
+KEY = {
+    "Service": "name",
+    "Team": "name",
+    "Person": "handle",
+    "Flag": "name",
+    "Change": "id",
+    "Incident": "id",
+    "Action": "id",
+    "Runbook": "id",
+}
 
 
 def _nid(node: dict) -> str:
@@ -27,6 +36,16 @@ def index():
     return FileResponse(UI / "index.html")
 
 
+@app.get("/console.css")
+def console_css():
+    return FileResponse(UI / "console.css", media_type="text/css")
+
+
+@app.get("/console.js")
+def console_js():
+    return FileResponse(UI / "console.js", media_type="text/javascript")
+
+
 @app.get("/api/graph")
 def graph(hours: float = 3.0):
     since = time.time() - hours * 3600
@@ -35,27 +54,36 @@ def graph(hours: float = 3.0):
               OR (n:Change AND (n.at >= $since OR (n)<-[:ROOT_CAUSE]-(:Incident)))
               OR (n:Incident) OR (n:Action AND n.dry_run = false)
               OR (n:Person AND (n)-[:ON_CALL_FOR]->())
-           RETURN n""", {"since": since}, timeout_ms=5000)
+           RETURN n""",
+        {"since": since},
+        timeout_ms=5000,
+    )
     nodes = {}
     for r in rows:
         n = r["n"]
         nid = _nid(n)
         props = {k: v for k, v in n.items() if not k.startswith("_") and k not in ("body", "summary", "symptom")}
         label = nid.split(":", 1)[0]
-        name = (n.get("name") or n.get("handle") or
-                (f"{n.get('service')} v{n.get('version')}" if n.get("kind") == "deploy" else None) or
-                (f"{n.get('flag')} → {n.get('to')}" if n.get("kind") == "flag" else None) or
-                (f"{n.get('kind')} {n.get('target')}" if label == "Action" else None) or n.get("id"))
+        name = (
+            n.get("name")
+            or n.get("handle")
+            or (f"{n.get('service')} v{n.get('version')}" if n.get("kind") == "deploy" else None)
+            or (f"{n.get('flag')} → {n.get('to')}" if n.get("kind") == "flag" else None)
+            or (f"{n.get('kind')} {n.get('target')}" if label == "Action" else None)
+            or n.get("id")
+        )
         nodes[nid] = {"id": nid, "type": label, "name": name, "props": props}
     links = store.read(
         """MATCH (a)-[r]->(b) WHERE type(r) IN ['CALLS','OWNS','ON_CALL_FOR','FOR','AFFECTS','CHANGED','TOGGLED',
                                                'IMPACTED','ROOT_CAUSE','RESOLVED_BY','ON','REVERTS','ESCALATES_TO']
-           RETURN a, type(r) AS type, b, r.optional AS optional""", timeout_ms=5000)
+           RETURN a, type(r) AS type, b, r.optional AS optional""",
+        timeout_ms=5000,
+    )
     out_links = []
-    for l in links:
-        s, t = _nid(l["a"]), _nid(l["b"])
+    for link in links:
+        s, t = _nid(link["a"]), _nid(link["b"])
         if s in nodes and t in nodes:
-            out_links.append({"source": s, "target": t, "type": l["type"], "optional": bool(l["optional"])})
+            out_links.append({"source": s, "target": t, "type": link["type"], "optional": bool(link["optional"])})
     return {"nodes": list(nodes.values()), "links": out_links}
 
 
@@ -64,15 +92,18 @@ def investigation(id: str | None = None):
     if id:
         v = store.read("MATCH (v:Investigation {id: $id}) RETURN v", {"id": id})
     else:
-        v = store.read("MATCH (v:Investigation) WHERE v.steps > 0 AND NOT v.id STARTS WITH 'cli-' "
-                       "RETURN v ORDER BY v.started_at DESC LIMIT 1")
+        v = store.read(
+            "MATCH (v:Investigation) WHERE v.steps > 0 AND NOT v.id STARTS WITH 'cli-' "
+            "RETURN v ORDER BY v.started_at DESC LIMIT 1"
+        )
     if not v:
         return {"investigation": None, "steps": []}
     inv = {k: val for k, val in v[0]["v"].items() if not k.startswith("_")}
     steps = store.read(
         """MATCH (v:Investigation {id: $id})-[s:STEP]->(x)
            RETURN s.n AS n, s.tool AS tool, s.note AS note, s.at AS at, collect(x) AS targets ORDER BY n""",
-        {"id": inv["id"]})
+        {"id": inv["id"]},
+    )
     for s in steps:
         s["targets"] = [_nid(t) for t in s["targets"] if "Investigation" not in t["_labels"]]
     return {"investigation": inv, "steps": steps}
@@ -102,6 +133,7 @@ def _background(name: str, fn) -> dict:
             fn()
         finally:
             _busy.update(task=None)
+
     threading.Thread(target=run, daemon=True).start()
     return {"started": name}
 
@@ -109,6 +141,7 @@ def _background(name: str, fn) -> dict:
 @app.post("/api/chaos/{scenario}")
 def chaos(scenario: str):
     from .cli import SCENARIOS, inject
+
     if scenario not in SCENARIOS:
         raise HTTPException(404, "unknown scenario")
     return _background(f"injecting {scenario}", lambda: (inject(scenario), ingest.sync_changes()))
@@ -117,6 +150,7 @@ def chaos(scenario: str):
 @app.post("/api/reset")
 def reset(hard: bool = False):
     from .cli import reset as do_reset
+
     if hard:
         return _background("resetting demo (fresh graph)", do_reset)
     return _background("restoring healthy state", lambda: do_reset(soft=True))
@@ -125,15 +159,19 @@ def reset(hard: bool = False):
 @app.post("/api/agent")
 def agent(mode: str = "graph"):
     from .responder import detect, run_agent
+
     hit = detect()
     if not hit:
         raise HTTPException(400, "no failing service right now")
-    return _background(f"agent investigating {hit[0]} ({mode})", lambda: run_agent(hit[0], hit[1], mode=mode, quiet=True))
+    return _background(
+        f"agent investigating {hit[0]} ({mode})", lambda: run_agent(hit[0], hit[1], mode=mode, quiet=True)
+    )
 
 
 @app.get("/api/scenarios")
 def scenarios():
     from .cli import SCENARIOS
+
     return SCENARIOS
 
 
@@ -147,7 +185,8 @@ def incidents():
                   i.mttr_min AS mttr_min, i.source AS source, i.summary AS summary,
                   collect(DISTINCT coalesce(rc.name, rc.version, rc.flag)) AS root_cause,
                   collect(DISTINCT {kind: a.kind, target: a.target, by: a.by}) AS fixed_by
-           ORDER BY opened_at DESC""")
+           ORDER BY opened_at DESC"""
+    )
     for r in rows:
         r["fixed_by"] = [a for a in r["fixed_by"] if a.get("kind")]
         r["root_cause"] = [x for x in r["root_cause"] if x]
@@ -161,5 +200,6 @@ def changes(hours: float = 24.0):
            OPTIONAL MATCH (c)-[:CHANGED]->(s:Service)
            OPTIONAL MATCH (c)-[:TOGGLED]->(:Flag)-[:AFFECTS]->(fs:Service)
            RETURN c, coalesce(s.name, fs.name) AS service ORDER BY c.at DESC LIMIT 40""",
-        {"since": time.time() - hours * 3600})
+        {"since": time.time() - hours * 3600},
+    )
     return [{**{k: v for k, v in r["c"].items() if not k.startswith("_")}, "service": r["service"]} for r in rows]

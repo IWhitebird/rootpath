@@ -6,6 +6,7 @@ import pytest
 def _stack_up() -> bool:
     try:
         from rootpath import infra, store
+
         store.query("RETURN 1")
         return infra.stats("frontend")["status"] != "down"
     except Exception:
@@ -25,6 +26,7 @@ def fresh(stack):
     """Hard reset before the test, so every scenario starts from the same healthy baseline."""
     from rootpath.cli import reset
     from rootpath.responder import detect
+
     reset()
     for _ in range(20):
         if detect() is None:
@@ -37,6 +39,7 @@ def fresh(stack):
 def wait_for_alert(timeout: float = 60):
     """Same rule as the watcher: two consecutive detections 5s apart; returns the second."""
     from rootpath.responder import detect
+
     end, strikes = time.time() + timeout, 0
     while time.time() < end:
         hit = detect()

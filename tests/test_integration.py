@@ -1,6 +1,8 @@
 """End-to-end tests against the live demo stack: inject each failure, check the graph reasoning,
 take the fix through the real action tools, verify recovery and incident memory."""
+
 import pytest
+from redis.exceptions import ResponseError
 
 from rootpath import config, infra, store, tools
 from rootpath.cli import inject as inject_scenario
@@ -26,7 +28,7 @@ def inject(name):
 
 
 def test_agent_reasoning_is_read_only(stack):
-    with pytest.raises(Exception):
+    with pytest.raises(ResponseError):
         store.safe_read("CREATE (:Hacked {x: 1}) RETURN 1")
     assert not store.query("MATCH (h:Hacked) RETURN h")
 
@@ -52,7 +54,9 @@ def test_rank_suspects_finds_the_origin(fresh, scenario):
 
 def test_bad_deploy_full_loop_and_memory(fresh):
     inject("bad-deploy")
-    inc = tools.open_incident("payment 5xx", "checkout 502 payment TypeError tokenizer", ["frontend", "checkout", "payment"])
+    inc = tools.open_incident(
+        "payment 5xx", "checkout 502 payment TypeError tokenizer", ["frontend", "checkout", "payment"]
+    )
     plan = tools.rollback_service("payment", "tokenizer TypeError", inc["incident_id"], dry_run=True)
     assert plan["dry_run"] and plan["plan"]["from_version"] == "2.4.1" and plan["plan"]["to_version"] == "2.4.0"
     assert "checkout" in plan["plan"]["blast_radius"] and "frontend" in plan["plan"]["blast_radius"]
@@ -88,7 +92,9 @@ def test_flag_fix_and_owner(fresh):
 
 def test_pool_restart_and_memory_recall(fresh):
     inject("pool")
-    memory = tools.find_similar_incidents("checkout 502 inventory PoolTimeout connection pool exhausted", service="inventory")
+    memory = tools.find_similar_incidents(
+        "checkout 502 inventory PoolTimeout connection pool exhausted", service="inventory"
+    )
     assert memory["matches"][0]["incident"] == "INC-019"
     assert memory["matches"][0]["fixed_by"][0]["kind"] == "restart"
     tools.restart_service("inventory", "pool exhausted", dry_run=False)
@@ -117,18 +123,25 @@ def test_blast_radius_and_paths(stack):
     br = tools.get_blast_radius("inventory")
     upstream = {r["service"] for r in br["affected_if_it_fails (upstream callers)"]}
     assert upstream == {"catalog", "checkout", "frontend"} and br["user_facing_impact"]
-    assert tools.trace_dependency_path("frontend", "fraud-check")["path"] == ["frontend", "checkout", "payment", "fraud-check"]
+    assert tools.trace_dependency_path("frontend", "fraud-check")["path"] == [
+        "frontend",
+        "checkout",
+        "payment",
+        "fraud-check",
+    ]
 
 
 def test_web_api(stack):
     from fastapi.testclient import TestClient
+
     from rootpath.web import app
+
     c = TestClient(app)
     assert c.get("/").status_code == 200
     g = c.get("/api/graph").json()
     types = {n["type"] for n in g["nodes"]}
     assert {"Service", "Team", "Incident", "Flag"} <= types
     ids = {n["id"] for n in g["nodes"]}
-    assert all(l["source"] in ids and l["target"] in ids for l in g["links"])
+    assert all(link["source"] in ids and link["target"] in ids for link in g["links"])
     assert set(c.get("/api/health").json()["services"]) == set(infra.services())
     assert c.post("/api/chaos/does-not-exist").status_code == 404
